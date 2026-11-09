@@ -770,6 +770,63 @@
       color: #111;
     }
 
+    /* Dedicated Volume Control */
+    .pc-volume-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pc-btn-vol {
+      min-width: 78px;
+      justify-content: center;
+    }
+
+    .pc-btn-vol.muted {
+      border-color: rgba(239, 68, 68, 0.6);
+      color: #f87171;
+    }
+
+    .pc-vol-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 76px;
+      height: 6px;
+      border-radius: 3px;
+      background: #333246;
+      outline: none;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      vertical-align: middle;
+    }
+    .pc-vol-slider:hover {
+      background: #44435b;
+    }
+    .pc-vol-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      transition: transform 0.12s ease;
+    }
+    .pc-vol-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.25);
+      background: var(--accent-hover);
+    }
+    .pc-vol-slider::-moz-range-thumb {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
+
     /* Player Servers */
     .player-servers {
       background: #161522;
@@ -1508,6 +1565,15 @@
                 <span>Auto Next</span>
                 <span class="pc-toggle-switch on" id="switchAutoNext"></span>
               </div>
+
+              <!-- Dedicated Volume Control -->
+              <div class="pc-volume-control">
+                <button class="pc-btn pc-btn-vol" id="btnToggleMute" onclick="toggleMute()" title="Mute / Unmute">
+                  <i class="fas fa-volume-up" id="volIcon"></i>
+                  <span id="volText">100%</span>
+                </button>
+                <input type="range" class="pc-vol-slider" id="volSlider" min="0" max="1" step="0.05" value="1" oninput="handleVolumeSlider(this.value)" title="Volume Slider">
+              </div>
             </div>
 
             <div class="pc-right">
@@ -1662,6 +1728,8 @@
     let autoPlay = true;
     let autoNext = true;
     let captionsEnabled = true;
+    let currentVolume = parseFloat(localStorage.getItem('ani_ui_volume') || '1.0');
+    let isMuted = localStorage.getItem('ani_ui_muted') === 'true';
 
     async function fetchJson(url) {
       try {
@@ -1723,6 +1791,79 @@
       captionsEnabled = !captionsEnabled;
       applyCaptionsState();
       showToast(captionsEnabled ? 'Captions: ON' : 'Captions: OFF', false);
+    }
+
+    /* VOLUME CONTROLS */
+    function updateVolumeUI() {
+      const video = document.getElementById('playerVideo');
+      const volIcon = document.getElementById('volIcon');
+      const volText = document.getElementById('volText');
+      const volSlider = document.getElementById('volSlider');
+      const btnToggleMute = document.getElementById('btnToggleMute');
+
+      const effectiveVol = isMuted ? 0 : currentVolume;
+
+      if (video) {
+        video.volume = currentVolume;
+        video.muted = isMuted;
+      }
+
+      if (volSlider) {
+        volSlider.value = effectiveVol;
+      }
+
+      const percent = Math.round(effectiveVol * 100);
+      if (volText) {
+        volText.innerText = isMuted ? 'Muted' : `${percent}%`;
+      }
+
+      if (volIcon) {
+        volIcon.className = 'fas';
+        if (isMuted || effectiveVol === 0) {
+          volIcon.classList.add('fa-volume-mute');
+        } else if (effectiveVol < 0.5) {
+          volIcon.classList.add('fa-volume-down');
+        } else {
+          volIcon.classList.add('fa-volume-up');
+        }
+      }
+
+      if (btnToggleMute) {
+        btnToggleMute.classList.toggle('muted', isMuted);
+      }
+    }
+
+    function handleVolumeSlider(val) {
+      currentVolume = parseFloat(val);
+      if (currentVolume > 0 && isMuted) {
+        isMuted = false;
+        localStorage.setItem('ani_ui_muted', 'false');
+      }
+      localStorage.setItem('ani_ui_volume', currentVolume.toString());
+      updateVolumeUI();
+    }
+
+    function toggleMute() {
+      isMuted = !isMuted;
+      if (!isMuted && currentVolume === 0) {
+        currentVolume = 0.5;
+        localStorage.setItem('ani_ui_volume', '0.5');
+      }
+      localStorage.setItem('ani_ui_muted', isMuted ? 'true' : 'false');
+      updateVolumeUI();
+      showToast(isMuted ? 'Muted' : `Volume: ${Math.round(currentVolume * 100)}%`, false);
+    }
+
+    function onVideoVolumeChange() {
+      const video = document.getElementById('playerVideo');
+      if (!video) return;
+      if (Math.abs(video.volume - currentVolume) > 0.01 || video.muted !== isMuted) {
+        currentVolume = video.volume;
+        isMuted = video.muted;
+        localStorage.setItem('ani_ui_volume', currentVolume.toString());
+        localStorage.setItem('ani_ui_muted', isMuted ? 'true' : 'false');
+        updateVolumeUI();
+      }
     }
 
     /* TABS */
@@ -2173,6 +2314,8 @@
 
         if (res.status === 'ok' && res.stream_proxy) {
           stopVideoPlayer();
+          video.onvolumechange = onVideoVolumeChange;
+          updateVolumeUI();
 
           // Subtitles
           if (res.subtitles && res.subtitles.length > 0) {
@@ -2376,6 +2519,9 @@
         toast.classList.remove('show');
       }, 3500);
     }
+
+    // Initialize Volume UI
+    updateVolumeUI();
 
     // Default load Latest Updates
     loadTab('latest');
