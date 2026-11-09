@@ -110,6 +110,28 @@ RESOLVED_MAL_IDS = {}
 def clean_title(title):
     return re.sub(r'[^a-zA-Z0-9]', '', title).lower()
 
+def resolve_mal_id_from_anilist(title):
+    if not title:
+        return None
+    try:
+        query = """
+        query ($search: String) {
+          Media (search: $search, type: ANIME) {
+            idMal
+          }
+        }
+        """
+        req = urllib.request.Request(
+            "https://graphql.anilist.co",
+            data=json.dumps({"query": query, "variables": {"search": title}}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": USER_AGENT}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("data", {}).get("Media", {}).get("idMal")
+    except Exception:
+        return None
+
 def resolve_mal_id_from_hianime(anime_id):
     if not anime_id:
         return None
@@ -140,16 +162,43 @@ def resolve_mal_id_from_hianime(anime_id):
     except Exception:
         pass
 
-    # Method 2: Check page Synonyms / Japanese title and search MAL
+    # Method 2: Check page title, Synonyms, and Japanese title
+    main_title = None
+    syns = []
+    japs = []
     try:
         page_html = http_get(f"{BASE_URL}/{anime_id}")
+        t_m = re.search(r'<h2[^>]*class="[^"]*film-name[^"]*"[^>]*>(?:<a[^>]*>)?([^<]+)', page_html)
+        if t_m:
+            main_title = html.unescape(t_m.group(1).strip())
         syns = re.findall(r'Synonyms:</span>\s*<span class="name">([^<]+)</span>', page_html)
         japs = re.findall(r'Japanese:</span>\s*<span class="name">([^<]+)</span>', page_html)
-        secrets = get_secrets()
-        client_id = secrets.get("MAL_CLIENT_ID", "ea58d724802b654ee16451f5c377b6cf")
-        for alt_title in syns + japs:
-            q = urllib.parse.quote(alt_title.strip())
-            search_url = f"https://api.myanimelist.net/v2/anime?q={q}&limit=1&fields=id,title"
+    except Exception:
+        pass
+
+    candidates = []
+    if main_title:
+        candidates.append(main_title)
+    for s in syns:
+        for it in s.split(","):
+            it_s = it.strip()
+            if it_s and it_s not in candidates:
+                candidates.append(it_s)
+    for j in japs:
+        j_s = j.strip()
+        if j_s and j_s not in candidates:
+            candidates.append(j_s)
+
+    slug_title = anime_id.rsplit("-", 1)[0].replace("-", " ")
+    if slug_title and slug_title not in candidates:
+        candidates.append(slug_title)
+
+    secrets = get_secrets()
+    client_id = secrets.get("MAL_CLIENT_ID", "ea58d724802b654ee16451f5c377b6cf")
+    for cand in candidates:
+        try:
+            q = urllib.parse.quote(cand.strip())
+            search_url = f"https://api.myanimelist.net/v2/anime?q={q}&limit=1&fields=id,title&nsfw=true"
             req = urllib.request.Request(search_url, headers={"X-MAL-CLIENT-ID": client_id})
             with urllib.request.urlopen(req, timeout=5) as resp:
                 res = json.loads(resp.read().decode())
@@ -158,8 +207,15 @@ def resolve_mal_id_from_hianime(anime_id):
                     mal_id = entries[0]["node"]["id"]
                     RESOLVED_MAL_IDS[anime_id] = mal_id
                     return mal_id
-    except Exception:
-        pass
+        except Exception:
+            pass
+
+    # Method 3: AniList search fallback for each candidate
+    for cand in candidates:
+        al_id = resolve_mal_id_from_anilist(cand)
+        if al_id:
+            RESOLVED_MAL_IDS[anime_id] = al_id
+            return al_id
 
     return None
 
@@ -309,7 +365,7 @@ def fetch_mal_score_and_synopsis(title):
     secrets = get_secrets()
     client_id = secrets.get("MAL_CLIENT_ID", "ea58d724802b654ee16451f5c377b6cf")
     q = urllib.parse.quote(title)
-    url = f"https://api.myanimelist.net/v2/anime?q={q}&limit=1&fields=mean,synopsis"
+    url = f"https://api.myanimelist.net/v2/anime?q={q}&limit=1&fields=mean,synopsis&nsfw=true"
     req = urllib.request.Request(url, headers={"X-MAL-CLIENT-ID": client_id})
     try:
         with urllib.request.urlopen(req, timeout=4) as resp:
@@ -554,7 +610,7 @@ def get_mal_anime_status(title=None, mal_id=None, anime_id=None):
         for cand in candidates:
             try:
                 q = urllib.parse.quote(cand)
-                url = f"https://api.myanimelist.net/v2/anime?q={q}&limit=5&fields=id,title,my_list_status,num_episodes,synopsis,mean"
+                url = f"https://api.myanimelist.net/v2/anime?q={q}&limit=5&fields=id,title,my_list_status,num_episodes,synopsis,mean&nsfw=true"
                 raw = http_get(url, {"Authorization": f"Bearer {token}"})
                 data = json.loads(raw)
                 entries = data.get("data", [])
@@ -574,6 +630,25 @@ def get_mal_anime_status(title=None, mal_id=None, anime_id=None):
                         }
             except Exception:
                 continue
+
+        # 5. AniList search fallback for mal_id
+        for cand in candidates:
+            al_mal_id = resolve_mal_id_from_anilist(cand)
+            if al_mal_id:
+                try:
+                    det_url = f"https://api.myanimelist.net/v2/anime/{al_mal_id}?fields=id,title,my_list_status,num_episodes,synopsis,mean"
+                    det_raw = http_get(det_url, {"Authorization": f"Bearer {token}"})
+                    det_data = json.loads(det_raw)
+                    return {
+                        "mal_id": det_data.get("id", al_mal_id),
+                        "title": det_data.get("title"),
+                        "num_episodes": det_data.get("num_episodes", "?"),
+                        "synopsis": det_data.get("synopsis", ""),
+                        "mean": det_data.get("mean"),
+                        "my_list_status": det_data.get("my_list_status")
+                    }
+                except Exception:
+                    pass
 
     return None
 
@@ -1308,15 +1383,22 @@ class RequestHandler(BaseHTTPRequestHandler):
             try:
                 payload = json.loads(body.decode("utf-8"))
                 mal_id = payload.get("mal_id")
+                anime_id = payload.get("anime_id")
+                title = payload.get("title")
                 status = payload.get("status")
                 score = payload.get("score")
                 num_watched = payload.get("num_watched_episodes")
 
                 if not mal_id:
-                    raise ValueError("mal_id is required")
+                    if anime_id:
+                        mal_id = resolve_mal_id_from_hianime(anime_id)
+                    if not mal_id and title:
+                        mal_id = resolve_mal_id_from_anilist(title)
+                if not mal_id:
+                    raise ValueError("mal_id could not be resolved for this anime")
 
                 result = update_mal_anime_status(mal_id, status, score, num_watched)
-                self._send_json({"status": "ok", "result": result})
+                self._send_json({"status": "ok", "result": result, "mal_id": mal_id})
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, 500)
             return

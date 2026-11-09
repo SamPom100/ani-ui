@@ -2920,10 +2920,7 @@
     }
 
     async function saveMALStatus() {
-      if (!currentMALData || !currentMALData.mal_id) {
-        showToast('Cannot save: MAL entry ID not found.', false);
-        return;
-      }
+      let malId = (currentMALData && currentMALData.mal_id) || (currentAnime && currentAnime.mal_id);
 
       const saveBtn = document.getElementById('btnSaveMAL');
       saveBtn.disabled = true;
@@ -2938,7 +2935,9 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            mal_id: currentMALData.mal_id,
+            mal_id: malId,
+            anime_id: currentAnime ? currentAnime.id : null,
+            title: currentAnime ? currentAnime.title : null,
             status: st,
             score: score,
             num_watched_episodes: epsWatched
@@ -2946,6 +2945,12 @@
         });
         const data = await res.json();
         if (data.status === 'ok') {
+          if (data.mal_id && currentAnime) {
+            currentAnime.mal_id = data.mal_id;
+            if (!currentMALData) currentMALData = {};
+            currentMALData.mal_id = data.mal_id;
+            updateExternalLinks(data.mal_id, currentAnime.title);
+          }
           showToast(`Saved to MAL: ${st.toUpperCase()} with rating ${score}!`, false);
           const color = st === 'completed' ? '#10b981' : (st === 'watching' ? '#06b6d4' : '#f59e0b');
           document.getElementById('watchMALSummary').innerHTML = `Saved: <strong style="color:${color};">${st.toUpperCase()}</strong> • Score: <strong>${score ? score + '/10' : 'None'}</strong> • Watched: <strong>${epsWatched}</strong>`;
