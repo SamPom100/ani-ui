@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HiAnime - Watch Anime Online Free with ani-cli</title>
+  <title>ani ui - Watch Anime Online with ani-cli</title>
   <link rel="icon" href="https://hianime.at/theme/images/icons-192.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -49,6 +49,18 @@
       font-size: 14px;
     }
 
+    video::cue {
+      background-color: rgba(0, 0, 0, 0.78);
+      color: #ffffff;
+      font-family: 'Poppins', -apple-system, sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.4;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+      border-radius: 4px;
+      padding: 2px 6px;
+    }
+
     a {
       color: inherit;
       text-decoration: none;
@@ -84,7 +96,7 @@
       user-select: none;
     }
 
-    .brand-hianime-logo {
+    .brand-ani-logo {
       display: flex;
       align-items: center;
       font-size: 26px;
@@ -92,11 +104,12 @@
       letter-spacing: -0.6px;
       line-height: 1;
     }
-    .brand-hianime-logo .logo-hi {
+    .brand-ani-logo .logo-ani {
       color: #ffffff;
     }
-    .brand-hianime-logo .logo-anime {
+    .brand-ani-logo .logo-ui {
       color: var(--accent-color);
+      margin-left: 2px;
     }
 
     .brand-badge-pill {
@@ -741,6 +754,22 @@
       color: var(--accent-color);
     }
 
+    .pc-btn-cc {
+      border-color: rgba(255, 186, 222, 0.4);
+      color: #fff;
+    }
+    .pc-btn-cc.active {
+      background: var(--accent-color);
+      color: #111;
+      border-color: var(--accent-color);
+      font-weight: 700;
+      box-shadow: 0 2px 8px rgba(255, 186, 222, 0.35);
+    }
+    .pc-btn-cc.active:hover {
+      background: var(--accent-hover);
+      color: #111;
+    }
+
     /* Player Servers */
     .player-servers {
       background: #161522;
@@ -1368,10 +1397,10 @@
   <header>
     <div class="header-top">
       <div class="brand" onclick="goHome()">
-        <div class="brand-hianime-logo">
-          <span class="logo-hi">Hi</span><span class="logo-anime">Anime</span>
+        <div class="brand-ani-logo">
+          <span class="logo-ani">ani</span><span class="logo-ui">ui</span>
         </div>
-        <div class="brand-badge-pill">ani-cli</div>
+        <div class="brand-badge-pill">for ani-cli</div>
       </div>
 
       <div class="search-bar">
@@ -1416,7 +1445,7 @@
       <div class="section-header">
         <div class="section-title" id="sectionTitle">
           <i class="fas fa-bolt"></i>
-          <span>Recently Updated on HiAnime</span>
+          <span>Recently Updated</span>
         </div>
         <div class="section-count" id="sectionCount">Loading catalog...</div>
       </div>
@@ -1426,7 +1455,7 @@
       </div>
     </div>
 
-    <!-- HIANIME WATCH STAGE (MATCHING https://hianime.at/watch/...) -->
+    <!-- WATCH STAGE (MATCHING HIANIME LAYOUT) -->
     <div id="watchStage" class="watch-stage">
       <div class="watch-breadcrumb-bar">
         <div class="breadcrumb-left">
@@ -1464,7 +1493,7 @@
             <video id="playerVideo" controls playsinline></video>
             <div id="playerLoading" class="player-loading-overlay" style="display: none;">
               <div class="spinner"></div>
-              <span>Resolving stream from HiAnime / ZokoAnime...</span>
+              <span>Resolving stream from ani-cli / ZokoAnime...</span>
             </div>
           </div>
 
@@ -1482,6 +1511,9 @@
             </div>
 
             <div class="pc-right">
+              <button class="pc-btn pc-btn-cc active" id="btnToggleCC" onclick="toggleCaptions()" title="Toggle Captions">
+                <i class="fas fa-closed-captioning"></i> <span id="ccText">CC: ON</span>
+              </button>
               <button class="pc-btn" onclick="prevEpisode()">
                 <i class="fas fa-backward"></i> Prev
               </button>
@@ -1498,7 +1530,7 @@
           <div class="player-servers">
             <div class="ps-status-notice">
               <i class="fas fa-info-circle"></i>
-              <span>You are watching <strong id="psCurrentEpNotice">Episode 1</strong>. Source: HiAnime / ZokoAnime.</span>
+              <span>You are watching <strong id="psCurrentEpNotice">Episode 1</strong>. Source: ani-cli / ZokoAnime.</span>
             </div>
 
             <div class="ps-block-row">
@@ -1629,6 +1661,7 @@
     let hlsInstance = null;
     let autoPlay = true;
     let autoNext = true;
+    let captionsEnabled = true;
 
     async function fetchJson(url) {
       try {
@@ -1659,6 +1692,39 @@
       document.getElementById('switchAutoNext').classList.toggle('on', autoNext);
     }
 
+    function applyCaptionsState() {
+      const video = document.getElementById('playerVideo');
+      const ccBtn = document.getElementById('btnToggleCC');
+      const ccText = document.getElementById('ccText');
+
+      if (ccBtn) ccBtn.classList.toggle('active', captionsEnabled);
+      if (ccText) ccText.innerText = captionsEnabled ? 'CC: ON' : 'CC: OFF';
+
+      if (!video || !video.textTracks) return;
+
+      let showedOne = false;
+      for (let i = 0; i < video.textTracks.length; i++) {
+        const track = video.textTracks[i];
+        if (captionsEnabled) {
+          const isEn = track.language === 'en' || (track.label && track.label.toLowerCase().includes('en'));
+          if (!showedOne && (isEn || i === 0)) {
+            track.mode = 'showing';
+            showedOne = true;
+          } else {
+            track.mode = 'hidden';
+          }
+        } else {
+          track.mode = 'hidden';
+        }
+      }
+    }
+
+    function toggleCaptions() {
+      captionsEnabled = !captionsEnabled;
+      applyCaptionsState();
+      showToast(captionsEnabled ? 'Captions: ON' : 'Captions: OFF', false);
+    }
+
     /* TABS */
     async function loadTab(tabName) {
       currentTab = tabName;
@@ -1672,7 +1738,7 @@
       const view = document.getElementById('contentView');
 
       if (tabName === 'latest') {
-        titleEl.innerHTML = '<i class="fas fa-bolt"></i><span>Recently Updated on HiAnime</span>';
+        titleEl.innerHTML = '<i class="fas fa-bolt"></i><span>Recently Updated</span>';
         setCount('Loading catalog...');
         view.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Fetching latest episodes...</div>';
         const data = await fetchJson('/api/latest');
@@ -1741,7 +1807,7 @@
       setCount('Searching...');
 
       const view = document.getElementById('contentView');
-      view.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Searching HiAnime catalog...</div>';
+      view.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Searching catalog...</div>';
 
       const data = await fetchJson(`/api/search?q=${encodeURIComponent(q)}`);
       if (data.status === 'ok') {
@@ -1824,7 +1890,7 @@
 
     async function handleCardClick(anime) {
       if (!anime.id && anime.title) {
-        showToast(`Resolving "${anime.title}" on HiAnime...`);
+        showToast(`Resolving "${anime.title}"...`);
         const res = await fetchJson(`/api/resolve?title=${encodeURIComponent(anime.title)}`);
         if (res.status === 'ok' && res.result) {
           openWatchView(res.result);
@@ -1916,7 +1982,7 @@
         openWatchView({ id: hianimeId, title: title, poster: "" });
         return;
       }
-      showToast(`Looking up "${title}" on HiAnime...`);
+      showToast(`Looking up "${title}"...`);
       const res = await fetchJson(`/api/resolve?title=${encodeURIComponent(title)}`);
       if (res.status === 'ok' && res.result) {
         openWatchView(res.result);
@@ -2119,6 +2185,10 @@
               if (s.default || idx === 0) track.default = true;
               video.appendChild(track);
             });
+            // Ensure captions mode is applied
+            video.addEventListener('loadedmetadata', applyCaptionsState, { once: true });
+            setTimeout(applyCaptionsState, 250);
+            setTimeout(applyCaptionsState, 750);
           }
 
           if (Hls.isSupported()) {
