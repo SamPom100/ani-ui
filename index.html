@@ -546,25 +546,62 @@
       font-weight: 600;
     }
 
-    .btn-mpv-hero {
+    .breadcrumb-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-ext-link {
       background: #1f1e2c;
-      border: 1px solid #4a4860;
+      border: 1px solid #3c3b52;
       color: #fff;
-      padding: 7px 16px;
+      padding: 6px 14px;
       border-radius: 20px;
-      font-size: 12.5px;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 7px;
       transition: all 0.18s ease;
       font-family: inherit;
+      text-decoration: none;
     }
-    .btn-mpv-hero:hover {
-      background: #3b3952;
-      border-color: var(--accent-color);
-      color: var(--accent-color);
+    .btn-ext-link:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    }
+    .btn-ext-link.btn-mal:hover {
+      border-color: #2e51a2;
+      color: #7da0f0;
+      background: rgba(46, 81, 162, 0.2);
+    }
+    .btn-ext-link.btn-anilist:hover {
+      border-color: #02a9ff;
+      color: #02a9ff;
+      background: rgba(2, 169, 255, 0.2);
+    }
+    .btn-badge-brand {
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 2px 5px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+      line-height: 1;
+    }
+    .mal-badge {
+      background: #2e51a2;
+      color: #fff;
+    }
+    .anilist-badge {
+      background: #02a9ff;
+      color: #fff;
+    }
+    .btn-ext-link i {
+      font-size: 10px;
+      opacity: 0.7;
     }
 
     /* 2-Column Watch Grid */
@@ -1406,9 +1443,16 @@
         </div>
 
         <div class="breadcrumb-right">
-          <button class="btn-mpv-hero" onclick="playInMpv()" title="Launch Native MPV">
-            <i class="fas fa-desktop"></i> Open in MPV
-          </button>
+          <a id="btnLinkMAL" class="btn-ext-link btn-mal" href="https://myanimelist.net" target="_blank" rel="noopener noreferrer" title="View on MyAnimeList">
+            <span class="btn-badge-brand mal-badge">MAL</span>
+            <span>MyAnimeList</span>
+            <i class="fas fa-external-link-alt"></i>
+          </a>
+          <a id="btnLinkAniList" class="btn-ext-link btn-anilist" href="https://anilist.co" target="_blank" rel="noopener noreferrer" title="View on AniList">
+            <span class="btn-badge-brand anilist-badge">AL</span>
+            <span>AniList</span>
+            <i class="fas fa-external-link-alt"></i>
+          </a>
         </div>
       </div>
 
@@ -1921,6 +1965,9 @@
       document.getElementById('watchMALScoreSelect').value = "0";
       document.getElementById('watchMALWatchedInput').value = "0";
 
+      // Update MAL and AniList links
+      updateExternalLinks(anime.mal_id, anime.title);
+
       // Render loading spinner in episode sidebar
       document.getElementById('watchEpisodesList').innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 10px;"></div>Loading episodes...</div>';
 
@@ -2145,30 +2192,16 @@
       }
     }
 
-    /* NATIVE MPV PLAYBACK */
-    async function playInMpv() {
-      if (!currentAnime) return;
-      showToast(`Launching mpv for Episode ${selectedEpisode}...`);
-
-      try {
-        const res = await fetch('/api/play', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: currentAnime.id,
-            title: currentAnime.title,
-            episode: selectedEpisode,
-            mode: currentMode
-          })
-        });
-        const data = await res.json();
-        if (data.status === 'ok') {
-          showToast(`Now playing Episode ${selectedEpisode} in mpv!`, false);
-        } else {
-          showToast(`Error: ${data.message || 'Failed to start stream'}`, false);
-        }
-      } catch (e) {
-        showToast('Failed to trigger playback server.', false);
+    /* EXTERNAL DATABASE LINKS */
+    function updateExternalLinks(malId, title) {
+      const malLink = document.getElementById('btnLinkMAL');
+      const alLink = document.getElementById('btnLinkAniList');
+      const t = title || (currentAnime ? currentAnime.title : '');
+      if (malLink) {
+        malLink.href = malId ? `https://myanimelist.net/anime/${malId}` : `https://myanimelist.net/anime.php?q=${encodeURIComponent(t)}`;
+      }
+      if (alLink) {
+        alLink.href = `https://anilist.co/search/anime?search=${encodeURIComponent(t)}`;
       }
     }
 
@@ -2184,6 +2217,7 @@
           currentMALData = res.data;
           if (res.data.mal_id && currentAnime) {
             currentAnime.mal_id = res.data.mal_id;
+            updateExternalLinks(res.data.mal_id, currentAnime.title);
           }
           if (res.data.synopsis) {
             document.getElementById('watchSynopsis').innerText = res.data.synopsis;
