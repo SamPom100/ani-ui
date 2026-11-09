@@ -827,6 +827,45 @@
       box-shadow: 0 1px 3px rgba(0,0,0,0.5);
     }
 
+    /* Watch Stage Recommendations */
+    .watch-recs-wrap {
+      margin-top: 36px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    .rec-source-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .rec-source-both {
+      background: linear-gradient(135deg, #a855f7, var(--accent-color));
+      color: #111;
+      font-weight: 800;
+      box-shadow: 0 2px 6px rgba(168, 85, 247, 0.4);
+    }
+    .rec-source-mal {
+      background: #2e51a2;
+      color: #fff;
+    }
+    .rec-source-anilist {
+      background: #02a9ff;
+      color: #fff;
+    }
+    .badge-source-pill {
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(255, 186, 222, 0.12);
+      color: var(--accent-color);
+      border: 1px solid rgba(255, 186, 222, 0.3);
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-left: 8px;
+    }
+
     /* Player Servers */
     .player-servers {
       background: #161522;
@@ -1708,6 +1747,25 @@
           </div>
         </div>
       </div>
+
+      <!-- RECOMMENDED SHOWS SECTION -->
+      <div class="watch-recs-wrap" id="watchRecsWrap">
+        <div class="section-header" style="margin-bottom: 18px;">
+          <div class="section-title">
+            <i class="fas fa-thumbs-up" style="color: var(--accent-color);"></i>
+            <span>Recommended for You</span>
+            <span class="badge-source-pill"><i class="fas fa-layer-group"></i> MAL & AniList</span>
+          </div>
+          <div class="section-count" id="watchRecsCount">Loading recommendations...</div>
+        </div>
+
+        <div class="grid" id="watchRecsGrid">
+          <div class="empty-state">
+            <div class="spinner" style="margin: 0 auto 12px;"></div>
+            Loading recommendations from MAL & AniList...
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -2211,6 +2269,9 @@
 
       // Load MAL synopsis & status
       loadMALStatus(anime.mal_id, anime.id, anime.title);
+
+      // Load recommendations from MAL and AniList
+      loadRecommendations(anime.mal_id, anime.id, anime.title);
     }
 
     function closeWatchView() {
@@ -2429,8 +2490,12 @@
         if (res.status === 'ok' && res.data) {
           currentMALData = res.data;
           if (res.data.mal_id && currentAnime) {
+            const hadMalId = !!currentAnime.mal_id;
             currentAnime.mal_id = res.data.mal_id;
             updateExternalLinks(res.data.mal_id, currentAnime.title);
+            if (!hadMalId) {
+              loadRecommendations(res.data.mal_id, animeId, title);
+            }
           }
           if (res.data.synopsis) {
             document.getElementById('watchSynopsis').innerText = res.data.synopsis;
@@ -2506,6 +2571,84 @@
         showToast('Network error updating MAL.', false);
       } finally {
         saveBtn.disabled = false;
+      }
+    }
+
+    /* MERGED RECOMMENDATIONS (MAL & ANILIST) */
+    async function loadRecommendations(malId, animeId, title) {
+      const grid = document.getElementById('watchRecsGrid');
+      const countEl = document.getElementById('watchRecsCount');
+      if (!grid) return;
+
+      countEl.innerText = "Finding recommendations...";
+      grid.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Finding recommendations from MAL & AniList...</div>';
+
+      const p = new URLSearchParams();
+      if (malId) p.set('mal_id', malId);
+      if (animeId) p.set('anime_id', animeId);
+      if (title) p.set('title', title);
+      p.set('limit', '10');
+
+      const res = await fetchJson(`/api/recommendations?${p.toString()}`);
+      if (res.status === 'ok' && res.results && res.results.length > 0) {
+        countEl.innerText = `${res.results.length} recommended shows`;
+        grid.innerHTML = res.results.map(anime => {
+          const isFav = anime.is_favorite;
+          const isWatch = anime.is_watching;
+          const isComp = anime.is_completed;
+          const cardClasses = `card ${isFav ? 'is-fav' : ''} ${isWatch ? 'is-watching' : ''} ${isComp ? 'is-completed' : ''}`.trim();
+          const poster = anime.poster || 'https://hianime.at/theme/images/no-image.jpg';
+
+          let sourceBadgeHtml = '';
+          if (anime.source_label === 'MAL & AniList') {
+            sourceBadgeHtml = '<span class="rec-source-badge rec-source-both">MAL & AniList</span>';
+          } else if (anime.source_label === 'AniList') {
+            sourceBadgeHtml = '<span class="rec-source-badge rec-source-anilist">AniList</span>';
+          } else {
+            sourceBadgeHtml = '<span class="rec-source-badge rec-source-mal">MAL</span>';
+          }
+
+          return `
+            <div class="${cardClasses}" onclick='handleCardClick(${JSON.stringify(anime).replace(/'/g, "&apos;")})'>
+              <div class="poster-wrap">
+                <img src="${poster}" alt="${anime.title}" loading="lazy" referrerpolicy="no-referrer">
+                
+                <div class="poster-overlay">
+                  <div class="overlay-play-circle"><i class="fas fa-play"></i></div>
+                </div>
+
+                <div class="card-top-badges">
+                  ${sourceBadgeHtml}
+                  ${isFav ? '<span class="badge-status badge-fav-tag">⭐ FAV</span>' : ''}
+                  ${isWatch ? '<span class="badge-status badge-watch-tag">📺 WATCHING</span>' : ''}
+                  ${isComp ? `<span class="badge-status badge-completed-tag">✓ WATCHED${anime.user_score ? ` (${anime.user_score}/10)` : ''}</span>` : ''}
+                </div>
+
+                ${anime.score && anime.score !== '-' ? `
+                  <div class="badge-score-pill">
+                    <i class="fas fa-star"></i>
+                    <span>${anime.score}</span>
+                  </div>
+                ` : ''}
+
+                <div class="tick-bottom-row">
+                  <span class="tick-item tick-eps">${anime.eps || '?'} Eps</span>
+                </div>
+              </div>
+
+              <div class="card-info">
+                <div class="card-title" title="${anime.title}">${anime.title}</div>
+                <div class="card-meta">
+                  <span style="color: #bbb;">${anime.source_label}</span>
+                  ${anime.score && anime.score !== '-' ? `<span style="color:#fbbf24; font-weight:700;"><i class="fas fa-star"></i> ${anime.score}</span>` : ''}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        countEl.innerText = "0 recommendations";
+        grid.innerHTML = '<div class="empty-state">No recommendations found for this show on MAL or AniList.</div>';
       }
     }
 

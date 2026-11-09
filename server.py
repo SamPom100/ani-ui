@@ -569,6 +569,188 @@ def update_mal_anime_status(mal_id, status, score=None, num_watched_episodes=Non
         CACHE.pop("user_sets", None)
         return result
 
+def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=10):
+    if mal_id:
+        try:
+            mal_id = int(mal_id)
+        except Exception:
+            pass
+
+    # 1. Resolve mal_id if missing
+    if not mal_id and anime_id:
+        mal_id = resolve_mal_id_from_hianime(anime_id)
+        
+    if not mal_id and title:
+        favs, watching, completed, all_by_clean, all_by_id = get_user_status_sets()
+        user_match = find_user_library_match(title, all_by_clean)
+        if user_match:
+            mal_id = user_match["id"]
+
+    cache_key = f"recs_{mal_id}_{anime_id}_{title}_{limit}"
+    if cache_key in CACHE and (time.time() - CACHE[cache_key]["ts"] < 600):
+        return CACHE[cache_key]["data"]
+
+    mal_recs = []
+    anilist_recs = []
+
+    def fetch_mal():
+        nonlocal mal_recs
+        if not mal_id:
+            return
+        try:
+            token = get_mal_access_token()
+            url = f"https://api.myanimelist.net/v2/anime/{mal_id}?fields=recommendations{{num_recommendations}}"
+            raw = http_get(url, {"Authorization": f"Bearer {token}"})
+            data = json.loads(raw)
+            for r in data.get("recommendations", []):
+                node = r.get("node", {})
+                if node and node.get("id"):
+                    mal_recs.append({
+                        "mal_id": node.get("id"),
+                        "title": node.get("title"),
+                        "poster": node.get("main_picture", {}).get("large") or node.get("main_picture", {}).get("medium") or "",
+                        "votes": r.get("num_recommendations", 0),
+                        "source": "MAL"
+                    })
+        except Exception as e:
+            print(f"[get_combined_recommendations] MAL recs error: {e}")
+
+    def fetch_anilist():
+        nonlocal anilist_recs
+        try:
+            query = """
+            query ($idMal: Int, $search: String) {
+              Media (idMal: $idMal, search: $search, type: ANIME) {
+                recommendations (perPage: 15, sort: RATING_DESC) {
+                  nodes {
+                    rating
+                    mediaRecommendation {
+                      id
+                      idMal
+                      title { romaji english }
+                      coverImage { large medium }
+                      averageScore
+                      episodes
+                      format
+                    }
+                  }
+                }
+              }
+            }
+            """
+            variables = {}
+            if mal_id:
+                variables["idMal"] = mal_id
+            elif title:
+                variables["search"] = title
+            else:
+                return
+
+            req = urllib.request.Request(
+                "https://graphql.anilist.co",
+                data=json.dumps({"query": query, "variables": variables}).encode("utf-8"),
+                headers={"Content-Type": "application/json", "User-Agent": USER_AGENT}
+            )
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                al_data = json.loads(resp.read().decode())
+                nodes = al_data.get("data", {}).get("Media", {}).get("recommendations", {}).get("nodes", [])
+                for n in nodes:
+                    mr = n.get("mediaRecommendation")
+                    if mr and (mr.get("idMal") or mr.get("title")):
+                        t = mr.get("title", {})
+                        chosen_title = t.get("english") or t.get("romaji") or ""
+                        score_val = str(round(mr.get("averageScore", 0) / 10, 1)) if mr.get("averageScore") else "-"
+                        anilist_recs.append({
+                            "mal_id": mr.get("idMal"),
+                            "anilist_id": mr.get("id"),
+                            "title": chosen_title,
+                            "alt_title": t.get("romaji") if chosen_title != t.get("romaji") else t.get("english"),
+                            "poster": mr.get("coverImage", {}).get("large") or mr.get("coverImage", {}).get("medium") or "",
+                            "score": score_val,
+                            "eps": str(mr.get("episodes") or "?"),
+                            "votes": n.get("rating", 0),
+                            "source": "AniList"
+                        })
+        except Exception as e:
+            print(f"[get_combined_recommendations] AniList recs error: {e}")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(fetch_mal)
+        f2 = executor.submit(fetch_anilist)
+        f1.result()
+        f2.result()
+
+    merged_map = {}
+    for r in mal_recs:
+        key = f"mal_{r['mal_id']}" if r.get("mal_id") else clean_title(r["title"])
+        merged_map[key] = {
+            "mal_id": r.get("mal_id"),
+            "anilist_id": None,
+            "title": r["title"],
+            "alt_title": "",
+            "poster": r["poster"],
+            "score": "-",
+            "eps": "?",
+            "sources": ["MAL"],
+            "votes": r.get("votes", 0),
+            "source_label": "MAL"
+        }
+
+    for r in anilist_recs:
+        key = None
+        if r.get("mal_id"):
+            cand_key = f"mal_{r['mal_id']}"
+            if cand_key in merged_map:
+                key = cand_key
+        if not key:
+            ct = clean_title(r["title"])
+            for existing_key, item in merged_map.items():
+                if clean_title(item["title"]) == ct or (r.get("alt_title") and clean_title(r["alt_title"]) == clean_title(item["title"])):
+                    key = existing_key
+                    break
+
+        if key and key in merged_map:
+            item = merged_map[key]
+            if "AniList" not in item["sources"]:
+                item["sources"].append("AniList")
+            item["source_label"] = "MAL & AniList"
+            item["anilist_id"] = r.get("anilist_id")
+            if r.get("score") and r["score"] != "-":
+                item["score"] = r["score"]
+            if r.get("eps") and r["eps"] != "?":
+                item["eps"] = r["eps"]
+            if not item.get("poster") and r.get("poster"):
+                item["poster"] = r["poster"]
+            item["votes"] += r.get("votes", 0)
+        else:
+            new_key = f"mal_{r['mal_id']}" if r.get("mal_id") else f"al_{r.get('anilist_id') or clean_title(r['title'])}"
+            merged_map[new_key] = {
+                "mal_id": r.get("mal_id"),
+                "anilist_id": r.get("anilist_id"),
+                "title": r["title"],
+                "alt_title": r.get("alt_title", ""),
+                "poster": r["poster"],
+                "score": r.get("score", "-"),
+                "eps": r.get("eps", "?"),
+                "sources": ["AniList"],
+                "votes": r.get("votes", 0),
+                "source_label": "AniList"
+            }
+
+    def sort_score(item):
+        is_both = 1 if len(item["sources"]) > 1 else 0
+        return (is_both, item.get("votes", 0))
+
+    sorted_recs = sorted(merged_map.values(), key=sort_score, reverse=True)
+    final_recs = sorted_recs[:limit]
+
+    favs, watching, completed, all_by_clean, all_by_id = get_user_status_sets()
+    for rec in final_recs:
+        tag_card_status(rec, favs, watching, completed, all_by_id)
+
+    CACHE[cache_key] = {"ts": time.time(), "data": final_recs}
+    return final_recs
+
 def get_favorites_list():
     if not os.path.exists(FAV_FILE):
         return []
@@ -989,6 +1171,22 @@ class RequestHandler(BaseHTTPRequestHandler):
             try:
                 data = get_mal_anime_status(title=title, mal_id=mal_id, anime_id=anime_id)
                 self._send_json({"status": "ok", "data": data})
+            except Exception as e:
+                self._send_json({"status": "error", "message": str(e)}, 500)
+            return
+
+        if path == "/api/recommendations":
+            title = params.get("title", [None])[0]
+            mal_id = params.get("mal_id", [None])[0]
+            anime_id = params.get("anime_id", [None])[0]
+            limit_str = params.get("limit", ["10"])[0]
+            try:
+                limit = int(limit_str)
+            except Exception:
+                limit = 10
+            try:
+                data = get_combined_recommendations(mal_id=mal_id, anime_id=anime_id, title=title, limit=limit)
+                self._send_json({"status": "ok", "results": data})
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, 500)
             return
