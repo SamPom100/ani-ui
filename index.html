@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ani-ui • HiAnime Browser for ani-cli</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    :root {
+      --bg-dark: #0b0c12;
+      --bg-card: #141620;
+      --bg-hover: #1c1f2e;
+      --accent: #ff4a5a;
+      --accent-hover: #ff6371;
+      --accent-sub: #3b82f6;
+      --accent-dub: #10b981;
+      --accent-fav: #f59e0b;
+      --accent-watching: #06b6d4;
+      --accent-mal: #2e51a2;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --border-subtle: #212433;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* HEADER */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(11, 12, 18, 0.94);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 12px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #ff4a5a, #ff7a45);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #fff;
+      font-size: 16px;
+      box-shadow: 0 4px 12px rgba(255, 74, 90, 0.35);
+    }
+
+    .brand-title {
+      font-size: 19px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #fff;
+    }
+
+    .brand-tag {
+      font-size: 10.5px;
+      font-weight: 600;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--accent);
+      padding: 2px 7px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .search-bar {
+      flex: 1;
+      max-width: 580px;
+      position: relative;
+    }
+
+    .search-bar input {
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      padding: 10px 18px 10px 42px;
+      border-radius: 9999px;
+      color: #fff;
+      font-size: 13.5px;
+      font-weight: 500;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .search-bar input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(255, 74, 90, 0.15);
+      background: #181b28;
+    }
+
+    .search-bar svg {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 15px;
+      height: 15px;
+      fill: var(--text-muted);
+    }
+
+    .header-tabs {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .header-tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tab-btn:hover {
+      color: #fff;
+      background: var(--bg-card);
+    }
+
+    .tab-btn.active {
+      color: #fff;
+      background: var(--bg-card);
+      border-color: var(--border-subtle);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+
+    /* MAIN CONTAINER */
+    main {
+      flex: 1;
+      padding: 24px;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-count {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* CARD GRID */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid transparent;
+      position: relative;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+      border-color: rgba(255, 74, 90, 0.45);
+    }
+
+    .card.is-fav {
+      border-color: rgba(245, 158, 11, 0.7);
+      box-shadow: 0 4px 18px rgba(245, 158, 11, 0.18);
+    }
+    .card.is-fav:hover {
+      border-color: #f59e0b;
+      box-shadow: 0 10px 28px rgba(245, 158, 11, 0.35);
+    }
+
+    .card.is-watching {
+      border-color: rgba(6, 182, 212, 0.7);
+      box-shadow: 0 4px 18px rgba(6, 182, 212, 0.18);
+    }
+    .card.is-watching:hover {
+      border-color: #06b6d4;
+      box-shadow: 0 10px 28px rgba(6, 182, 212, 0.35);
+    }
+
+    .card.is-completed {
+      border-color: rgba(16, 185, 129, 0.7);
+      box-shadow: 0 4px 18px rgba(16, 185, 129, 0.18);
+    }
+    .card.is-completed:hover {
+      border-color: #10b981;
+      box-shadow: 0 10px 28px rgba(16, 185, 129, 0.35);
+    }
+
+    .card.is-fav.is-watching {
+      border-color: #f59e0b;
+      box-shadow: 0 4px 20px rgba(245, 158, 11, 0.25);
+    }
+    .card.is-fav.is-completed {
+      border-color: #f59e0b;
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.25);
+    }
+
+    .poster-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 3 / 4.4;
+      background: #10121a;
+      overflow: hidden;
+    }
+
+    .poster-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.3s ease;
+    }
+
+    .card:hover .poster-wrap img {
+      transform: scale(1.05);
+    }
+
+    .card-top-badges {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 2;
+    }
+
+    .card-badges {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      z-index: 2;
+    }
+
+    .badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      backdrop-filter: blur(8px);
+    }
+
+    .badge-sub {
+      background: rgba(59, 130, 246, 0.9);
+      color: #fff;
+    }
+
+    .badge-dub {
+      background: rgba(16, 185, 129, 0.9);
+      color: #fff;
+    }
+
+    .badge-eps {
+      background: rgba(0, 0, 0, 0.75);
+      color: #e5e7eb;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .badge-score {
+      background: rgba(245, 158, 11, 0.92);
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    .badge-fav-tag {
+      background: #f59e0b;
+      color: #000;
+      box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+    }
+
+    .badge-watch-tag {
+      background: #06b6d4;
+      color: #000;
+      box-shadow: 0 2px 8px rgba(6, 182, 212, 0.4);
+    }
+
+    .badge-completed-tag {
+      background: #10b981;
+      color: #000;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+    }
+
+    .card-info {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .card-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--text-main);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-meta {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: auto;
+      padding-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* SCHEDULE STYLES */
+    .schedule-container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .schedule-days-bar {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+    }
+
+    .schedule-days-bar::-webkit-scrollbar {
+      height: 6px;
+    }
+    .schedule-days-bar::-webkit-scrollbar-thumb {
+      background: var(--border-subtle);
+      border-radius: 4px;
+    }
+
+    .day-pill {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      padding: 10px 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 95px;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .day-pill:hover {
+      border-color: var(--accent);
+      background: var(--bg-hover);
+    }
+
+    .day-pill.active {
+      background: linear-gradient(135deg, rgba(255, 74, 90, 0.2), rgba(255, 122, 69, 0.1));
+      border-color: var(--accent);
+      box-shadow: 0 4px 14px rgba(255, 74, 90, 0.2);
+    }
+
+    .day-pill .date {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .day-pill .wday {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .day-pill.active .wday {
+      color: var(--accent);
+    }
+
+    .today-tag {
+      font-size: 9px;
+      font-weight: 800;
+      background: var(--accent);
+      color: #fff;
+      padding: 1px 5px;
+      border-radius: 4px;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .timetable {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .timetable-row {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      position: relative;
+    }
+
+    .timetable-row:hover {
+      background: var(--bg-hover);
+      border-color: rgba(255, 74, 90, 0.4);
+      transform: translateX(4px);
+    }
+
+    .timetable-row.is-fav {
+      border-color: rgba(245, 158, 11, 0.6);
+      background: rgba(245, 158, 11, 0.04);
+    }
+
+    .timetable-row.is-watching {
+      border-color: rgba(6, 182, 212, 0.6);
+      background: rgba(6, 182, 212, 0.04);
+    }
+
+    .timetable-row.is-completed {
+      border-color: rgba(16, 185, 129, 0.6);
+      background: rgba(16, 185, 129, 0.04);
+    }
+
+    .schedule-thumb {
+      width: 54px;
+      aspect-ratio: 3 / 4.4;
+      border-radius: 8px;
+      object-fit: cover;
+      background: #11131c;
+      flex-shrink: 0;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+    }
+
+    .time-badge {
+      background: rgba(255, 74, 90, 0.15);
+      border: 1px solid rgba(255, 74, 90, 0.3);
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 13px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      min-width: 65px;
+      text-align: center;
+    }
+
+    .ep-badge {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #10b981;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+
+    .timetable-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .timetable-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .timetable-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .timetable-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .play-link-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .play-link-btn:hover {
+      background: var(--accent-hover);
+    }
+
+    /* MODAL */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.82);
+      backdrop-filter: blur(14px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      max-width: 900px;
+      width: 100%;
+      max-height: 94vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 22px 28px 16px;
+      display: flex;
+      gap: 22px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .modal-poster {
+      width: 135px;
+      aspect-ratio: 3 / 4.4;
+      border-radius: 10px;
+      object-fit: cover;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      flex-shrink: 0;
+    }
+
+    .modal-details {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .modal-title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .modal-title {
+      font-size: 21px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .fav-btn {
+      background: var(--bg-hover);
+      border: 1px solid var(--border-subtle);
+      color: #fbbf24;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .fav-btn:hover {
+      background: #fbbf24;
+      color: #000;
+    }
+
+    .modal-genres {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .genre-tag {
+      font-size: 11px;
+      background: var(--bg-hover);
+      color: var(--text-muted);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+
+    .modal-overview {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #d1d5db;
+      max-height: 110px;
+      overflow-y: auto;
+      margin-top: 4px;
+      padding-right: 4px;
+    }
+
+    .close-btn {
+      position: absolute;
+      top: 18px;
+      right: 20px;
+      background: var(--bg-hover);
+      border: none;
+      color: var(--text-muted);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      z-index: 5;
+    }
+
+    .close-btn:hover {
+      color: #fff;
+      background: var(--accent);
+    }
+
+    .modal-body {
+      padding: 20px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* IN-BROWSER PLAYER CONTAINER */
+    .video-wrapper {
+      display: none;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+      position: relative;
+    }
+
+    .video-wrapper.active {
+      display: block;
+    }
+
+    #playerVideo {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      display: block;
+      outline: none;
+    }
+
+    /* MAL EDIT SECTION */
+    .mal-box {
+      background: rgba(46, 81, 162, 0.08);
+      border: 1px solid rgba(46, 81, 162, 0.25);
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .mal-box-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .mal-badge-title {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: #60a5fa;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mal-form-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .mal-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 130px;
+    }
+
+    .mal-field label {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .mal-field select, .mal-field input {
+      background: #10121b;
+      border: 1px solid var(--border-subtle);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    .mal-field select:focus, .mal-field input:focus {
+      border-color: #60a5fa;
+    }
+
+    .mal-save-btn {
+      background: var(--accent-mal);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 16px;
+      transition: all 0.15s ease;
+      height: 36px;
+    }
+
+    .mal-save-btn:hover {
+      background: #3b65cc;
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .mode-switch {
+      display: flex;
+      background: var(--bg-dark);
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .mode-btn {
+      padding: 5px 12px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 11.5px;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .mode-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .episodes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+      gap: 7px;
+      max-height: 180px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .ep-btn {
+      background: var(--bg-hover);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 8px 4px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ep-btn:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      transform: scale(1.04);
+    }
+
+    .ep-btn.selected {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(255, 74, 90, 0.4);
+    }
+
+    .modal-footer {
+      padding: 16px 28px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      background: rgba(18, 20, 28, 0.7);
+    }
+
+    .browser-play-btn {
+      background: linear-gradient(135deg, #ff4a5a, #ff6371);
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.18s ease;
+      box-shadow: 0 4px 14px rgba(255, 74, 90, 0.35);
+    }
+
+    .browser-play-btn:hover {
+      background: #ff6371;
+      transform: translateY(-2px);
+    }
+
+    .mpv-btn {
+      background: var(--bg-hover);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .mpv-btn:hover {
+      background: #25293d;
+      border-color: var(--text-muted);
+    }
+
+    /* TOAST */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e2130;
+      border: 1px solid var(--border-subtle);
+      padding: 14px 20px;
+      border-radius: 12px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #fff;
+      z-index: 200;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-top">
+      <div class="brand" onclick="loadTab('latest')">
+        <div class="brand-logo">▶</div>
+        <div class="brand-title">ani-ui</div>
+        <div class="brand-tag">for ani-cli</div>
+      </div>
+
+      <div class="search-bar">
+        <svg viewBox="0 0 24 24"><path d="M10 18a7.952 7.952 0 0 0 4.897-1.688l4.396 4.396 1.414-1.414-4.396-4.396A7.952 7.952 0 0 0 18 10c0-4.411-3.589-8-8-8s-8 3.589-8 8 3.589 8 8 8zm0-14c3.309 0 6 2.691 6 6s-2.691 6-6 6-6-2.691-6-6 2.691-6 6-6z"/></svg>
+        <input type="text" id="searchInput" placeholder="Search anime title..." onkeydown="handleSearchKey(event)">
+      </div>
+    </div>
+
+    <div class="header-tabs">
+      <button class="tab-btn active" id="tab_latest" onclick="loadTab('latest')">⚡ Latest Updates</button>
+      <button class="tab-btn" id="tab_mal_watching" onclick="loadTab('mal_watching')">📺 MAL Watching</button>
+      <button class="tab-btn" id="tab_mal_ptw" onclick="loadTab('mal_ptw')">📋 MAL Plan to Watch</button>
+      <button class="tab-btn" id="tab_favorites" onclick="loadTab('favorites')">⭐ Favorites</button>
+      <button class="tab-btn" id="tab_schedule" onclick="loadTab('schedule')">📅 Schedule</button>
+      <button class="tab-btn" id="tab_history" onclick="loadTab('history')">🕒 ani-cli History</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="section-header">
+      <div class="section-title" id="sectionTitle">
+        <span>⚡ Recently Updated on HiAnime</span>
+      </div>
+      <div class="section-count" id="sectionCount">Loading...</div>
+    </div>
+
+    <!-- MAIN VIEW CONTAINER -->
+    <div id="contentView">
+      <div class="grid" id="animeGrid"></div>
+    </div>
+  </main>
+
+  <!-- MODAL FOR EPISODES, IN-BROWSER PLAYER & MAL EDIT -->
+  <div class="modal-backdrop" id="modalBackdrop" onclick="closeModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="close-btn" onclick="closeModal()">&times;</button>
+      
+      <div class="modal-header">
+        <img src="" alt="" class="modal-poster" id="modalPoster">
+        <div class="modal-details">
+          <div class="modal-title-row">
+            <div class="modal-title" id="modalTitle">Anime Title</div>
+            <button class="fav-btn" id="modalFavBtn" onclick="toggleModalFav()" title="Toggle Favorite">⭐</button>
+          </div>
+          <div class="modal-genres" id="modalGenres"></div>
+          <div class="modal-overview" id="modalOverview">Loading description from MyAnimeList...</div>
+        </div>
+      </div>
+
+      <div class="modal-body">
+        <!-- IN-BROWSER VIDEO PLAYER -->
+        <div class="video-wrapper" id="videoWrapper">
+          <video id="playerVideo" controls playsinline></video>
+        </div>
+
+        <!-- MAL EDIT BOX -->
+        <div class="mal-box" id="malBox">
+          <div class="mal-box-header">
+            <div class="mal-badge-title">
+              <span>MyAnimeList Status</span>
+            </div>
+            <span id="malCurrentStatusText" style="font-size:12px; color:var(--text-muted); font-weight:600;">Checking MAL...</span>
+          </div>
+
+          <div class="mal-form-row">
+            <div class="mal-field">
+              <label>Status</label>
+              <select id="malStatusSelect" onchange="handleMALStatusChange()">
+                <option value="watching">Watching</option>
+                <option value="completed">Completed</option>
+                <option value="plan_to_watch">Plan to Watch</option>
+                <option value="on_hold">On Hold</option>
+                <option value="dropped">Dropped</option>
+              </select>
+            </div>
+
+            <div class="mal-field">
+              <label>Rating</label>
+              <select id="malScoreSelect">
+                <option value="0">(0) Select Score</option>
+                <option value="10">(10) Masterpiece</option>
+                <option value="9">(9) Great</option>
+                <option value="8">(8) Very Good</option>
+                <option value="7">(7) Good</option>
+                <option value="6">(6) Fine</option>
+                <option value="5">(5) Average</option>
+                <option value="4">(4) Bad</option>
+                <option value="3">(3) Very Bad</option>
+                <option value="2">(2) Horrible</option>
+                <option value="1">(1) Appalling</option>
+              </select>
+            </div>
+
+            <div class="mal-field" style="max-width: 130px;">
+              <label>Episodes Watched</label>
+              <input type="number" id="malWatchedEpInput" min="0" value="0">
+            </div>
+
+            <button class="mal-save-btn" id="btnSaveMAL" onclick="saveMALStatus()">
+              <span>Save to MAL</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- EPISODES SECTION -->
+        <div>
+          <div class="controls-row">
+            <span style="font-weight: 700; font-size: 13.5px;">Episodes:</span>
+            <div class="mode-switch">
+              <button class="mode-btn active" id="btnSub" onclick="setMode('sub')">SUB</button>
+              <button class="mode-btn" id="btnDub" onclick="setMode('dub')">DUB</button>
+            </div>
+          </div>
+
+          <div class="episodes-grid" id="episodesGrid"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <span id="selectedEpText" style="font-size: 13px; color: var(--text-muted); font-weight: 600; margin-right: auto;">Episode 1 selected</span>
+        
+        <button class="browser-play-btn" id="btnPlayBrowser" onclick="playInBrowser()">
+          <span>▶ Play in Browser</span>
+        </button>
+
+        <button class="mpv-btn" id="btnPlayMpv" onclick="playInMpv()">
+          <span>🖥️ Open in mpv</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast">
+    <div class="spinner" id="toastSpinner"></div>
+    <span id="toastMsg">Launching episode...</span>
+  </div>
+
+  <script>
+    let currentAnime = null;
+    let currentMALData = null;
+    let selectedEpisode = "1";
+    let currentMode = "sub";
+    let activeTabName = "latest";
+    let hlsInstance = null;
+
+    async function loadTab(tabName) {
+      activeTabName = tabName;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById(`tab_${tabName}`);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      if (tabName === 'latest') {
+        setTitle('⚡ Recently Updated on HiAnime', 'Fetching...');
+        renderLoading();
+        const data = await fetchJson('/api/latest');
+        if (data.status === 'ok') {
+          renderGrid(data.results);
+          setCount(`${data.results.length} recently updated`);
+        }
+      } else if (tabName === 'mal_watching') {
+        setTitle('📺 MyAnimeList — Currently Watching', 'Fetching...');
+        renderLoading();
+        const data = await fetchJson('/api/mal?status=watching');
+        if (data.status === 'ok') {
+          renderMALGrid(data.results, true);
+          setCount(`${data.results.length} watching`);
+        }
+      } else if (tabName === 'mal_ptw') {
+        setTitle('📋 MyAnimeList — Plan to Watch', 'Fetching...');
+        renderLoading();
+        const data = await fetchJson('/api/mal?status=plan_to_watch');
+        if (data.status === 'ok') {
+          renderMALGrid(data.results, false);
+          setCount(`${data.results.length} planned`);
+        }
+      } else if (tabName === 'favorites') {
+        setTitle('⭐ My Favorites (ani-favorites)', 'Fetching...');
+        renderLoading();
+        const data = await fetchJson('/api/favorites');
+        if (data.status === 'ok') {
+          renderGrid(data.results);
+          setCount(`${data.results.length} favorites`);
+        }
+      } else if (tabName === 'schedule') {
+        setTitle('📅 Airing Schedule (Anikoto)', 'Loading timetable...');
+        renderScheduleView();
+      } else if (tabName === 'history') {
+        setTitle('🕒 ani-cli Watch History', 'Fetching...');
+        renderLoading();
+        const data = await fetchJson('/api/history');
+        if (data.status === 'ok') {
+          renderHistoryGrid(data.results);
+          setCount(`${data.results.length} entries`);
+        }
+      }
+    }
+
+    async function fetchJson(url) {
+      try {
+        const res = await fetch(url);
+        return await res.json();
+      } catch (e) {
+        return { status: 'error', message: e.message };
+      }
+    }
+
+    function setTitle(title, count) {
+      document.getElementById('sectionTitle').innerHTML = `<span>${title}</span>`;
+      document.getElementById('sectionCount').innerText = count;
+    }
+
+    function setCount(count) {
+      document.getElementById('sectionCount').innerText = count;
+    }
+
+    function renderLoading() {
+      document.getElementById('contentView').innerHTML = `
+        <div class="empty-state">
+          <div class="spinner" style="margin: 0 auto 16px; width: 28px; height: 28px;"></div>
+          Loading anime catalog...
+        </div>
+      `;
+    }
+
+    function renderGrid(items) {
+      if (!items || items.length === 0) {
+        document.getElementById('contentView').innerHTML = '<div class="empty-state">No anime found.</div>';
+        return;
+      }
+
+      document.getElementById('contentView').innerHTML = `
+        <div class="grid">
+          ${items.map(anime => {
+            const isFav = anime.is_favorite;
+            const isWatch = anime.is_watching;
+            const isCompleted = anime.is_completed;
+            const cardClasses = `card ${isFav ? 'is-fav' : ''} ${isWatch ? 'is-watching' : ''} ${isCompleted ? 'is-completed' : ''}`.trim();
+
+            return `
+              <div class="${cardClasses}" onclick='handleCardClick(${JSON.stringify(anime).replace(/'/g, "&apos;")})'>
+                <div class="poster-wrap">
+                  <img src="${anime.poster}" alt="${anime.title}" loading="lazy" referrerpolicy="no-referrer">
+                  
+                  <div class="card-top-badges">
+                    ${isFav ? '<span class="badge badge-fav-tag">⭐ FAVORITE</span>' : ''}
+                    ${isWatch ? '<span class="badge badge-watch-tag">📺 WATCHING</span>' : ''}
+                    ${isCompleted ? `<span class="badge badge-completed-tag">✓ WATCHED${anime.user_score ? ` (${anime.user_score}/10)` : ''}</span>` : ''}
+                  </div>
+
+                  <div class="card-badges">
+                    ${anime.score && anime.score !== '-' ? `<span class="badge badge-score">★ ${anime.score}</span>` : ''}
+                    ${anime.sub && anime.sub !== '-' ? `<span class="badge badge-sub">SUB ${anime.sub}</span>` : ''}
+                    ${anime.dub && anime.dub !== '-' ? `<span class="badge badge-dub">DUB ${anime.dub}</span>` : ''}
+                    ${anime.eps ? `<span class="badge badge-eps">${anime.eps}</span>` : ''}
+                  </div>
+                </div>
+                <div class="card-info">
+                  <div class="card-title" title="${anime.title}">${anime.title}</div>
+                  <div class="card-meta">
+                    <span>${anime.type || 'Anime'}</span>
+                    ${anime.score && anime.score !== '-' ? `<span style="color:#fbbf24; font-weight:700;">★ ${anime.score}</span>` : ''}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function renderMALGrid(items, isWatching) {
+      if (!items || items.length === 0) {
+        document.getElementById('contentView').innerHTML = '<div class="empty-state">No anime found in this MyAnimeList list.</div>';
+        return;
+      }
+
+      document.getElementById('contentView').innerHTML = `
+        <div class="grid">
+          ${items.map(item => {
+            const isFav = item.is_favorite;
+            return `
+              <div class="card ${isFav ? 'is-fav' : ''}" onclick='handleMALCardClick(${JSON.stringify(item).replace(/'/g, "&apos;")})'>
+                <div class="poster-wrap">
+                  <img src="${item.poster}" alt="${item.title}" loading="lazy" referrerpolicy="no-referrer">
+                  <div class="card-top-badges">
+                    ${isFav ? '<span class="badge badge-fav-tag">⭐ FAVORITE</span>' : ''}
+                  </div>
+                  <div class="card-badges">
+                    <span class="badge badge-eps">${isWatching ? `Watched: Ep ${item.watched_ep}/${item.total_eps}` : `Eps: ${item.total_eps}`}</span>
+                    ${item.score && item.score !== '-' ? `<span class="badge badge-score">★ ${item.score}</span>` : ''}
+                  </div>
+                </div>
+                <div class="card-info">
+                  <div class="card-title" title="${item.title}">${item.title}</div>
+                  <div class="card-meta">
+                    <span>${item.genres || 'MyAnimeList'}</span>
+                    ${item.score && item.score !== '-' ? `<span style="color:#fbbf24; font-weight:700;">★ ${item.score}</span>` : ''}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function renderHistoryGrid(items) {
+      if (!items || items.length === 0) {
+        document.getElementById('contentView').innerHTML = '<div class="empty-state">No history recorded in ~/.local/state/ani-cli/ani-hsts yet.</div>';
+        return;
+      }
+
+      document.getElementById('contentView').innerHTML = `
+        <div class="grid">
+          ${items.map(item => `
+            <div class="card ${item.is_favorite ? 'is-fav' : ''} ${item.is_watching ? 'is-watching' : ''} ${item.is_completed ? 'is-completed' : ''}" onclick='handleCardClick(${JSON.stringify({ ...item, eps: `Ep ${item.last_ep}` }).replace(/'/g, "&apos;")})'>
+              <div class="poster-wrap">
+                <img src="${item.poster}" alt="${item.title}" loading="lazy" referrerpolicy="no-referrer">
+                <div class="card-top-badges">
+                  ${item.is_favorite ? '<span class="badge badge-fav-tag">⭐ FAVORITE</span>' : ''}
+                  ${item.is_watching ? '<span class="badge badge-watch-tag">📺 WATCHING</span>' : ''}
+                  ${item.is_completed ? `<span class="badge badge-completed-tag">✓ WATCHED${item.user_score ? ` (${item.user_score}/10)` : ''}</span>` : ''}
+                </div>
+                <div class="card-badges">
+                  <span class="badge badge-eps">Last watched: Ep ${item.last_ep}</span>
+                </div>
+              </div>
+              <div class="card-info">
+                <div class="card-title" title="${item.title}">${item.title}</div>
+                <div class="card-meta">Watch History</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    /* SCHEDULE VIEW */
+    async function renderScheduleView() {
+      const container = document.getElementById('contentView');
+      container.innerHTML = `
+        <div class="schedule-container">
+          <div class="schedule-days-bar" id="scheduleDaysBar">
+            <div class="spinner" style="margin: 20px auto;"></div>
+          </div>
+          <div class="timetable" id="scheduleTimetable">
+            <div class="spinner" style="margin: 20px auto;"></div>
+          </div>
+        </div>
+      `;
+
+      const data = await fetchJson('/api/schedule');
+      if (data.status === 'ok') {
+        const schedule = data.data;
+        renderDaysBar(schedule.days, schedule.selected_time);
+        renderTimetable(schedule.items);
+        setCount(`${schedule.items.length} shows scheduled today`);
+      }
+    }
+
+    function renderDaysBar(days, selectedTime) {
+      const bar = document.getElementById('scheduleDaysBar');
+      if (!days || days.length === 0) return;
+
+      bar.innerHTML = days.map((d) => `
+        <div class="day-pill ${d.time === selectedTime || (!selectedTime && d.is_today) ? 'active' : ''}" onclick="selectScheduleDate('${d.time}', this)">
+          <div class="date">${d.date}</div>
+          <div class="wday">${d.wday}</div>
+          ${d.is_today ? '<span class="today-tag">TODAY</span>' : ''}
+        </div>
+      `).join('');
+    }
+
+    async function selectScheduleDate(timeValue, pillEl) {
+      document.querySelectorAll('.day-pill').forEach(p => p.classList.remove('active'));
+      pillEl.classList.add('active');
+
+      const timetable = document.getElementById('scheduleTimetable');
+      timetable.innerHTML = '<div class="spinner" style="margin: 20px auto;"></div>';
+
+      const data = await fetchJson(`/api/schedule?time=${timeValue}`);
+      if (data.status === 'ok') {
+        renderTimetable(data.data.items);
+        setCount(`${data.data.items.length} scheduled shows`);
+      }
+    }
+
+    function renderTimetable(items) {
+      const timetable = document.getElementById('scheduleTimetable');
+      if (!items || items.length === 0) {
+        timetable.innerHTML = '<div class="empty-state">No anime scheduled for this day.</div>';
+        return;
+      }
+
+      timetable.innerHTML = items.map(it => {
+        const rowClasses = `timetable-row ${it.is_favorite ? 'is-fav' : ''} ${it.is_watching ? 'is-watching' : ''} ${it.is_completed ? 'is-completed' : ''}`.trim();
+        const posterImg = it.poster || "https://hianime.at/theme/images/no-image.jpg";
+
+        return `
+          <div class="${rowClasses}" onclick="handleScheduleItemClick('${it.title.replace(/'/g, "\\'")}', '${it.id || ''}')">
+            <img src="${posterImg}" alt="${it.title}" class="schedule-thumb" loading="lazy" referrerpolicy="no-referrer">
+            <div class="time-badge">${it.time}</div>
+            <div class="ep-badge">${it.ep}</div>
+            <div class="timetable-info">
+              <div class="timetable-title-row">
+                <span class="timetable-title">${it.title}</span>
+                ${it.is_favorite ? '<span class="badge badge-fav-tag">⭐ FAVORITE</span>' : ''}
+                ${it.is_watching ? '<span class="badge badge-watch-tag">📺 WATCHING</span>' : ''}
+                ${it.is_completed ? `<span class="badge badge-completed-tag">✓ WATCHED${it.user_score ? ` (${it.user_score}/10)` : ''}</span>` : ''}
+              </div>
+              <div class="timetable-sub">${it.jp || ''}</div>
+            </div>
+            <button class="play-link-btn" onclick="event.stopPropagation(); handleScheduleItemClick('${it.title.replace(/'/g, "\\'")}', '${it.id || ''}')">
+              <span>▶ Watch</span>
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function handleScheduleItemClick(title, hianimeId) {
+      if (hianimeId) {
+        openModal({ id: hianimeId, title: title, poster: "" });
+        return;
+      }
+      showToast(`Looking up "${title}" on HiAnime...`);
+      const res = await fetchJson(`/api/resolve?title=${encodeURIComponent(title)}`);
+      if (res.status === 'ok' && res.result) {
+        openModal(res.result);
+      } else {
+        document.getElementById('searchInput').value = title;
+        executeSearch();
+      }
+    }
+
+    async function handleMALCardClick(malItem) {
+      showToast(`Resolving "${malItem.title}" on HiAnime...`);
+      const res = await fetchJson(`/api/resolve?title=${encodeURIComponent(malItem.title)}`);
+      if (res.status === 'ok' && res.result) {
+        const targetAnime = {
+          ...res.result,
+          mal_id: malItem.mal_id,
+          synopsis: malItem.synopsis || "",
+          poster: malItem.poster || res.result.poster,
+          last_ep: malItem.watched_ep ? (parseInt(malItem.watched_ep) + 1).toString() : "1"
+        };
+        openModal(targetAnime);
+      } else {
+        document.getElementById('searchInput').value = malItem.title;
+        executeSearch();
+      }
+    }
+
+    function handleCardClick(anime) {
+      if (!anime.id && anime.title) {
+        handleScheduleItemClick(anime.title, "");
+      } else {
+        openModal(anime);
+      }
+    }
+
+    /* SEARCH */
+    function handleSearchKey(e) {
+      if (e.key === 'Enter') {
+        executeSearch();
+      }
+    }
+
+    async function executeSearch() {
+      const q = document.getElementById('searchInput').value.trim();
+      if (!q) return;
+
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      setTitle(`Search results for: "${q}"`, 'Searching...');
+      renderLoading();
+
+      const data = await fetchJson(`/api/search?q=${encodeURIComponent(q)}`);
+      if (data.status === 'ok') {
+        renderGrid(data.results);
+        setCount(`${data.results.length} results`);
+      }
+    }
+
+    /* MODAL */
+    async function openModal(anime) {
+      currentAnime = anime;
+      currentMALData = null;
+      selectedEpisode = anime.last_ep || "1";
+
+      // Stop previous video playback
+      stopVideoPlayer();
+
+      document.getElementById('modalTitle').innerText = anime.title;
+      if (anime.poster) document.getElementById('modalPoster').src = anime.poster;
+      
+      // Default description
+      if (anime.synopsis) {
+        document.getElementById('modalOverview').innerText = anime.synopsis;
+      } else {
+        document.getElementById('modalOverview').innerText = "Loading synopsis from MyAnimeList...";
+      }
+
+      document.getElementById('modalGenres').innerHTML = "";
+      document.getElementById('episodesGrid').innerHTML = '<div class="spinner" style="margin: 20px auto;"></div>';
+      document.getElementById('selectedEpText').innerText = `Episode ${selectedEpisode} selected`;
+      
+      // Reset MAL form
+      document.getElementById('malCurrentStatusText').innerText = "Checking MAL...";
+      document.getElementById('malStatusSelect').value = "watching";
+      document.getElementById('malScoreSelect').value = "0";
+      document.getElementById('malWatchedEpInput').value = "0";
+
+      document.getElementById('modalBackdrop').classList.add('open');
+
+      // Fetch anime details & episodes
+      if (anime.id) {
+        fetchJson(`/api/details?id=${encodeURIComponent(anime.id)}`).then(res => {
+          if (res.status === 'ok') {
+            const data = res.data;
+            if (data.mal_id && (!currentAnime.mal_id || !currentMALData || !currentMALData.mal_id)) {
+              currentAnime.mal_id = data.mal_id;
+              if (!currentMALData || !currentMALData.mal_id) {
+                loadMALStatus(data.mal_id, anime.id, anime.title);
+              }
+            }
+            if (data.overview && !anime.synopsis) {
+              document.getElementById('modalOverview').innerText = data.overview;
+            }
+            document.getElementById('modalGenres').innerHTML = data.genres.map(g => `<span class="genre-tag">${g}</span>`).join('');
+            
+            if (data.episodes && data.episodes.length > 0) {
+              document.getElementById('episodesGrid').innerHTML = data.episodes.map(ep => `
+                <button class="ep-btn ${ep.number === selectedEpisode ? 'selected' : ''}" onclick="selectEpisode('${ep.number}', this)">
+                  ${ep.number}
+                </button>
+              `).join('');
+            } else {
+              document.getElementById('episodesGrid').innerHTML = '<div style="color:var(--text-muted); font-size:13px;">Defaulting to Ep 1.</div>';
+            }
+          }
+        });
+      }
+
+      // Load MAL synopsis & status
+      loadMALStatus(anime.mal_id, anime.id, anime.title);
+    }
+
+    function loadMALStatus(malId, animeId, title) {
+      const p = new URLSearchParams();
+      if (malId) p.set('mal_id', malId);
+      if (animeId) p.set('anime_id', animeId);
+      if (title) p.set('title', title);
+
+      fetchJson(`/api/mal/status?${p.toString()}`).then(res => {
+        if (res.status === 'ok' && res.data) {
+          currentMALData = res.data;
+          if (res.data.mal_id && currentAnime) {
+            currentAnime.mal_id = res.data.mal_id;
+          }
+          if (res.data.synopsis) {
+            document.getElementById('modalOverview').innerText = res.data.synopsis;
+          }
+          const mls = res.data.my_list_status;
+          if (mls) {
+            const stName = (mls.status || '').replace('_', ' ').toUpperCase();
+            const color = mls.status === 'completed' ? '#10b981' : (mls.status === 'watching' ? '#06b6d4' : '#f59e0b');
+            document.getElementById('malCurrentStatusText').innerHTML = `Currently: <strong style="color:${color};">${stName}</strong> • Score: <strong>${mls.score ? mls.score + '/10' : 'None'}</strong> • Watched: <strong>${mls.num_episodes_watched || 0}/${res.data.num_episodes || '?'}</strong>`;
+            document.getElementById('malStatusSelect').value = mls.status || "watching";
+            document.getElementById('malScoreSelect').value = (mls.score || 0).toString();
+            document.getElementById('malWatchedEpInput').value = (mls.num_episodes_watched || 0).toString();
+          } else {
+            document.getElementById('malCurrentStatusText').innerHTML = `Not in your list • Total: <strong>${res.data.num_episodes || '?'}</strong> eps`;
+            document.getElementById('malStatusSelect').value = "plan_to_watch";
+            document.getElementById('malScoreSelect').value = "0";
+            document.getElementById('malWatchedEpInput').value = "0";
+          }
+        } else {
+          document.getElementById('malCurrentStatusText').innerText = "MAL entry not found";
+        }
+      });
+    }
+
+    function handleMALStatusChange() {
+      const st = document.getElementById('malStatusSelect').value;
+      if (st === 'completed' && currentMALData && currentMALData.num_episodes && currentMALData.num_episodes !== '?') {
+        document.getElementById('malWatchedEpInput').value = currentMALData.num_episodes;
+      }
+    }
+
+    async function saveMALStatus() {
+      if (!currentMALData || !currentMALData.mal_id) {
+        showToast('Cannot save: MAL entry ID not found.', false);
+        return;
+      }
+
+      const saveBtn = document.getElementById('btnSaveMAL');
+      saveBtn.disabled = true;
+      showToast('Updating MyAnimeList entry...');
+
+      const st = document.getElementById('malStatusSelect').value;
+      const score = parseInt(document.getElementById('malScoreSelect').value) || 0;
+      const epsWatched = parseInt(document.getElementById('malWatchedEpInput').value) || 0;
+
+      try {
+        const res = await fetch('/api/mal/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mal_id: currentMALData.mal_id,
+            status: st,
+            score: score,
+            num_watched_episodes: epsWatched
+          })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          showToast(`Saved to MAL: ${st.toUpperCase()} with rating ${score}!`, false);
+          const color = st === 'completed' ? '#10b981' : (st === 'watching' ? '#06b6d4' : '#f59e0b');
+          document.getElementById('malCurrentStatusText').innerHTML = `Saved: <strong style="color:${color};">${st.toUpperCase()}</strong> • Score: <strong>${score ? score + '/10' : 'None'}</strong> • Watched: <strong>${epsWatched}</strong>`;
+        } else {
+          showToast(`Error: ${data.message || 'Failed to update MAL'}`, false);
+        }
+      } catch (e) {
+        showToast('Network error updating MAL.', false);
+      } finally {
+        saveBtn.disabled = false;
+      }
+    }
+
+    function selectEpisode(epNum, btn) {
+      selectedEpisode = epNum;
+      document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      document.getElementById('selectedEpText').innerText = `Episode ${epNum} selected`;
+      
+      // If video was already open, play new episode
+      if (document.getElementById('videoWrapper').classList.contains('active')) {
+        playInBrowser();
+      }
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('btnSub').classList.toggle('active', mode === 'sub');
+      document.getElementById('btnDub').classList.toggle('active', mode === 'dub');
+      if (document.getElementById('videoWrapper').classList.contains('active')) {
+        playInBrowser();
+      }
+    }
+
+    async function toggleModalFav() {
+      if (!currentAnime) return;
+      const res = await fetch('/api/favorite/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: currentAnime.title })
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        showToast(data.is_favorite ? 'Added to favorites!' : 'Removed from favorites!', false);
+      }
+    }
+
+    function stopVideoPlayer() {
+      const video = document.getElementById('playerVideo');
+      if (video) {
+        video.pause();
+        video.src = "";
+        video.innerHTML = "";
+      }
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+      document.getElementById('videoWrapper').classList.remove('active');
+    }
+
+    function closeModal(e) {
+      if (!e || e.target === document.getElementById('modalBackdrop') || e.target.classList.contains('close-btn')) {
+        stopVideoPlayer();
+        document.getElementById('modalBackdrop').classList.remove('open');
+      }
+    }
+
+    /* IN-BROWSER PLAYBACK VIA HLS.JS */
+    async function playInBrowser() {
+      if (!currentAnime) return;
+      
+      const btn = document.getElementById('btnPlayBrowser');
+      btn.disabled = true;
+      showToast(`Loading Episode ${selectedEpisode} in browser...`);
+
+      const wrapper = document.getElementById('videoWrapper');
+      const video = document.getElementById('playerVideo');
+      wrapper.classList.add('active');
+
+      try {
+        const res = await fetchJson(`/api/stream/resolve?id=${encodeURIComponent(currentAnime.id)}&title=${encodeURIComponent(currentAnime.title)}&episode=${selectedEpisode}&mode=${currentMode}`);
+        if (res.status === 'ok' && res.stream_proxy) {
+          stopVideoPlayer();
+          wrapper.classList.add('active');
+
+          // Load subtitles if present
+          if (res.subtitles && res.subtitles.length > 0) {
+            res.subtitles.forEach((s, idx) => {
+              const track = document.createElement('track');
+              track.kind = 'subtitles';
+              track.label = s.lang || s.label || `Subtitle ${idx+1}`;
+              track.srclang = s.lang ? s.lang.toLowerCase() : 'en';
+              track.src = s.src;
+              if (s.default || idx === 0) track.default = true;
+              video.appendChild(track);
+            });
+          }
+
+          if (Hls.isSupported()) {
+            hlsInstance = new Hls({
+              enableWorker: true,
+              lowLatencyMode: false,
+              backBufferLength: 90,
+              maxBufferLength: 30,
+              maxMaxBufferLength: 60,
+              fragLoadingTimeOut: 25000,
+              manifestLoadingTimeOut: 20000,
+              fragLoadingMaxRetry: 4
+            });
+            hlsInstance.loadSource(res.stream_proxy);
+            hlsInstance.attachMedia(video);
+            hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+              video.play().catch(() => {});
+            });
+            hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+              if (data.fatal) {
+                switch (data.type) {
+                  case Hls.ErrorTypes.NETWORK_ERROR:
+                    hlsInstance.startLoad();
+                    break;
+                  case Hls.ErrorTypes.MEDIA_ERROR:
+                    hlsInstance.recoverMediaError();
+                    break;
+                  default:
+                    showToast(`Player error: ${data.details}`, false);
+                    hlsInstance.destroy();
+                    break;
+                }
+              }
+            });
+          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            // Native Safari HLS support
+            video.src = res.stream_proxy;
+            video.addEventListener('loadedmetadata', () => {
+              video.play().catch(() => {});
+            });
+          } else {
+            showToast('HLS playback is not supported by your browser.', false);
+          }
+          showToast(`Now playing Episode ${selectedEpisode}!`, false);
+        } else {
+          showToast(`Stream error: ${res.message || 'No stream available'}`, false);
+        }
+      } catch (e) {
+        showToast('Failed to resolve stream.', false);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    /* PLAY IN NATIVE MPV */
+    async function playInMpv() {
+      if (!currentAnime) return;
+      
+      const btn = document.getElementById('btnPlayMpv');
+      btn.disabled = true;
+      showToast(`Launching mpv for Episode ${selectedEpisode}...`);
+
+      try {
+        const res = await fetch('/api/play', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: currentAnime.id,
+            title: currentAnime.title,
+            episode: selectedEpisode,
+            mode: currentMode
+          })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          showToast(`Now playing Episode ${selectedEpisode} in mpv!`, false);
+        } else {
+          showToast(`Error: ${data.message || 'Failed to start stream'}`, false);
+        }
+      } catch (e) {
+        showToast('Failed to trigger playback server.', false);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function showToast(msg, showSpinner = true) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').innerText = msg;
+      document.getElementById('toastSpinner').style.display = showSpinner ? 'block' : 'none';
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 4000);
+    }
+
+    // Default load Latest Updates
+    loadTab('latest');
+  </script>
+</body>
+</html>
