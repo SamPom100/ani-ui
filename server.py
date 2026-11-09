@@ -914,9 +914,9 @@ def toggle_favorite(title):
         favs.append(title)
         is_now_fav = True
         
-    with open(FAV_FILE, "w") as f:
-        for f in favs:
-            f.write(f + "\n")
+    with open(FAV_FILE, "w") as fp:
+        for item in favs:
+            fp.write(item + "\n")
             
     CACHE.pop("user_sets", None)
     return is_now_fav
