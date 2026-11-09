@@ -392,14 +392,36 @@ def get_anime_details_and_episodes(anime_id):
     if mal_id:
         mal_data = get_mal_anime_status(mal_id=mal_id)
         if mal_data:
-            mal_info = {"synopsis": mal_data.get("synopsis", ""), "score": str(mal_data.get("mean") or "-")}
+            mal_info = {
+                "synopsis": mal_data.get("synopsis", ""),
+                "score": str(mal_data.get("mean") or "-"),
+                "poster": mal_data.get("poster", "")
+            }
     
     if not mal_info.get("synopsis"):
         mal_info = fetch_mal_score_and_synopsis(anime_id.rsplit("-", 1)[0].replace("-", " "))
     synopsis = mal_info.get("synopsis", "")
     
+    title = ""
+    jp_title = ""
+    poster = ""
+    type_val = "Anime"
     try:
         info_html = http_get(f"{BASE_URL}/{anime_id}")
+        title_m = re.search(r'<h2[^>]*class="[^"]*film-name[^"]*"[^>]*>(?:<a[^>]*>)?([^<]+)', info_html)
+        if title_m:
+            title = html.unescape(title_m.group(1).strip())
+        jp_m = re.search(r'Japanese:</span>\s*<span class="name">([^<]+)</span>', info_html)
+        if jp_m:
+            jp_title = html.unescape(jp_m.group(1).strip())
+        poster_m = re.search(r'class="film-poster-img"[^>]*src="([^"]+)"', info_html)
+        if poster_m:
+            poster = poster_m.group(1)
+        type_m = re.search(r'>Type:</span>\s*<a[^>]*>([^<]+)</a>', info_html)
+        if not type_m:
+            type_m = re.search(r'>Type:</span>\s*<span[^>]*>([^<]+)</span>', info_html)
+        if type_m:
+            type_val = html.unescape(type_m.group(1).strip())
         overview_m = re.search(r'class="film-description text-justify">.*?<div class="text">([^<]+)</div>', info_html, re.DOTALL)
         genres_m = re.findall(r'<a href="/genre/[^"]+">([^<]+)</a>', info_html)
         score_m = re.search(r'MAL Score:</span>\s*<span[^>]*>([^<]+)</span>', info_html)
@@ -408,16 +430,27 @@ def get_anime_details_and_episodes(anime_id):
         genres_m = []
         score_m = None
 
+    if not title:
+        title = anime_id.rsplit("-", 1)[0].replace("-", " ").title()
+
     final_overview = synopsis if synopsis else (html.unescape(overview_m.group(1).strip()) if overview_m else "No description available.")
 
-    return {
+    card = {
         "id": anime_id,
+        "title": title,
+        "jp": jp_title,
+        "poster": poster or mal_info.get("poster") or "https://hianime.at/theme/images/no-image.jpg",
+        "type": type_val,
         "mal_id": mal_id,
         "episodes": episodes,
         "overview": final_overview,
         "genres": [html.unescape(g) for g in genres_m],
         "score": score_m.group(1) if score_m else mal_info.get("score", "N/A")
     }
+
+    favs, watching, completed, all_by_clean, all_by_id = get_user_status_sets()
+    card = tag_card_status(card, favs, watching, completed, all_by_id)
+    return card
 
 def fetch_mal_list(status):
     cache_key = f"mal_{status}"
@@ -1013,7 +1046,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         path = parsed.path
         params = urllib.parse.parse_qs(parsed.query)
 
-        if path == "/":
+        if path == "/" or path.startswith("/watch"):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
@@ -1197,6 +1230,23 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self._send_json({"status": "ok", "results": favs})
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, 500)
+            return
+
+        if path == "/api/favorite":
+            title = params.get("title", [None])[0]
+            favs, watching, completed, all_by_clean, all_by_id = get_user_status_sets()
+            ct = clean_title(title) if title else ""
+            is_fav = any(clean_title(f) in ct or ct in clean_title(f) for f in favs) if ct else False
+            self._send_json({"status": "ok", "is_favorite": is_fav})
+            return
+
+        if path == "/api/favorite/toggle":
+            title = params.get("title", [None])[0]
+            if title:
+                is_fav = toggle_favorite(title)
+                self._send_json({"status": "ok", "is_favorite": is_fav})
+            else:
+                self._send_json({"status": "error", "message": "Missing title"}, 400)
             return
 
         if path == "/api/schedule":

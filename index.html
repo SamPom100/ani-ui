@@ -770,6 +770,73 @@
       color: #111;
     }
 
+    .pc-btn-fav.active {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: #f59e0b;
+      color: #fbbf24;
+      font-weight: 700;
+    }
+
+    .pc-user-status-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 6px;
+      letter-spacing: 0.3px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      user-select: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .pc-user-status-pill:hover {
+      filter: brightness(1.15);
+    }
+
+    .watch-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    .status-completed {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.5);
+    }
+    .status-watching {
+      background: rgba(6, 182, 212, 0.2);
+      color: #22d3ee;
+      border: 1px solid rgba(6, 182, 212, 0.5);
+    }
+    .status-ptw {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.5);
+    }
+    .status-on-hold {
+      background: rgba(249, 115, 22, 0.2);
+      color: #fb923c;
+      border: 1px solid rgba(249, 115, 22, 0.5);
+    }
+    .status-dropped {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.5);
+    }
+    .status-none {
+      background: #252438;
+      color: #999;
+      border: 1px solid var(--border-subtle);
+    }
+
     /* Dedicated Volume Control */
     .pc-volume-control {
       display: inline-flex;
@@ -1625,9 +1692,12 @@
               <button class="pc-btn" onclick="nextEpisode()">
                 Next <i class="fas fa-forward"></i>
               </button>
-              <button class="pc-btn" onclick="toggleWatchFav()" id="btnWatchFav">
-                ⭐ Favorite
+              <button class="pc-btn pc-btn-fav" onclick="toggleWatchFav()" id="btnWatchFav" title="Toggle Favorite">
+                <i class="far fa-star"></i> Favorite
               </button>
+              <div class="pc-user-status-pill status-none" id="pcUserStatusPill" onclick="scrollToMALManager()" title="Click to manage MyAnimeList status">
+                <i class="fas fa-layer-group"></i> <span>Not in List</span>
+              </div>
             </div>
           </div>
 
@@ -1678,6 +1748,7 @@
         <div class="anisc-info">
           <div class="anisc-title-row">
             <h1 class="anisc-title" id="watchTitle">Anime Title</h1>
+            <div id="watchTitleBadges" style="display:inline-flex; align-items:center; gap:8px; margin-left: 12px; vertical-align: middle;"></div>
             <div class="anisc-jp-title" id="watchJpTitle">Japanese Romaji</div>
           </div>
 
@@ -1688,6 +1759,7 @@
             <span class="tick-badge tick-eps" id="watchEpsBadge">? Eps</span>
             <span class="tick-badge tick-score" id="watchScoreBadge">★ -</span>
             <span class="tick-type" id="watchTypeBadge">Anime</span>
+            <span id="watchStatusTick" style="display:none; cursor:pointer;" onclick="scrollToMALManager()"></span>
           </div>
 
           <div class="anisc-genres" id="watchGenres"></div>
@@ -1806,6 +1878,9 @@
     function goHome() {
       closeWatchView();
       loadTab('latest');
+      if (window.location.pathname !== '/') {
+        window.history.pushState({}, '', '/');
+      }
     }
 
     function toggleAutoPlay() {
@@ -2194,10 +2269,104 @@
     /* ==========================================================================
        HIANIME WATCH VIEW CONTROLLER
        ========================================================================== */
-    async function openWatchView(anime) {
+    function updateLibraryStatusUI(status, score, epsWatched, totalEps, isFav) {
+      // 1. Favorite button
+      const favBtn = document.getElementById('btnWatchFav');
+      if (favBtn) {
+        favBtn.classList.toggle('active', !!isFav);
+        favBtn.innerHTML = isFav 
+          ? '<i class="fas fa-star" style="color:#f59e0b;"></i> Favorited' 
+          : '<i class="far fa-star"></i> Favorite';
+      }
+
+      // 2. Player Controls Status Pill & Title Badges
+      const pcPill = document.getElementById('pcUserStatusPill');
+      const titleBadges = document.getElementById('watchTitleBadges');
+      const tickBadge = document.getElementById('watchStatusTick');
+
+      let stText = 'Not in List';
+      let stClass = 'status-none';
+      let icon = 'fas fa-plus';
+
+      if (status === 'completed') {
+        stText = score ? `✓ Completed (${score}/10)` : '✓ Completed';
+        stClass = 'status-completed';
+        icon = 'fas fa-check-circle';
+      } else if (status === 'watching') {
+        const epProgress = (epsWatched && totalEps && totalEps !== '?') ? ` (${epsWatched}/${totalEps})` : '';
+        stText = `📺 Watching${epProgress}`;
+        stClass = 'status-watching';
+        icon = 'fas fa-play-circle';
+      } else if (status === 'plan_to_watch') {
+        stText = '🔖 Plan to Watch';
+        stClass = 'status-ptw';
+        icon = 'fas fa-bookmark';
+      } else if (status === 'on_hold') {
+        stText = '⏸ On Hold';
+        stClass = 'status-on-hold';
+        icon = 'fas fa-pause-circle';
+      } else if (status === 'dropped') {
+        stText = '✕ Dropped';
+        stClass = 'status-dropped';
+        icon = 'fas fa-times-circle';
+      }
+
+      if (pcPill) {
+        pcPill.className = `pc-user-status-pill ${stClass}`;
+        pcPill.innerHTML = `<i class="${icon}"></i> <span>${stText}</span>`;
+      }
+
+      if (titleBadges) {
+        titleBadges.innerHTML = `
+          ${isFav ? '<span class="watch-status-pill" style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.5);"><i class="fas fa-star"></i> FAVORITE</span>' : ''}
+          ${status ? `<span class="watch-status-pill ${stClass}"><i class="${icon}"></i> ${stText}</span>` : ''}
+        `;
+      }
+
+      if (tickBadge) {
+        if (status) {
+          tickBadge.style.display = 'inline-flex';
+          tickBadge.className = `tick-badge ${stClass}`;
+          tickBadge.innerHTML = `<i class="${icon}"></i> ${stText}`;
+        } else {
+          tickBadge.style.display = 'none';
+        }
+      }
+    }
+
+    function scrollToMALManager() {
+      const el = document.querySelector('.mal-manager-card');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.boxShadow = '0 0 0 2px var(--accent-color)';
+        setTimeout(() => { el.style.boxShadow = ''; }, 2000);
+      }
+    }
+
+    async function restoreWatchFromUrl(animeId, epNum) {
+      if (!animeId) return;
+      document.getElementById('catalogStage').style.display = 'none';
+      const watchStage = document.getElementById('watchStage');
+      watchStage.classList.add('active');
+      document.getElementById('watchTitle').innerText = "Loading anime...";
+      document.getElementById('psCurrentEpNotice').innerText = `Episode ${epNum || "1"}`;
+      document.getElementById('watchEpisodesList').innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 10px;"></div>Loading episodes...</div>';
+
+      const res = await fetchJson(`/api/details?id=${encodeURIComponent(animeId)}`);
+      if (res.status === 'ok' && res.data) {
+        const anime = res.data;
+        anime.last_ep = epNum || "1";
+        openWatchView(anime, epNum || "1", false);
+      } else {
+        showToast(`Could not load anime "${animeId}".`, false);
+        goHome();
+      }
+    }
+
+    async function openWatchView(anime, epNum, shouldPushState = true) {
       currentAnime = anime;
       currentMALData = null;
-      selectedEpisode = anime.last_ep || "1";
+      selectedEpisode = epNum || anime.last_ep || "1";
       allEpisodes = [];
 
       stopVideoPlayer();
@@ -2207,6 +2376,14 @@
       const watchStage = document.getElementById('watchStage');
       watchStage.classList.add('active');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // Track in URL
+      if (shouldPushState && anime.id) {
+        const targetUrl = `/watch/${anime.id}?ep=${selectedEpisode}`;
+        if (window.location.pathname + window.location.search !== targetUrl) {
+          window.history.pushState({ animeId: anime.id, ep: selectedEpisode }, '', targetUrl);
+        }
+      }
 
       // Populate basic metadata
       document.getElementById('crumbTitle').innerText = `Watching ${anime.title}`;
@@ -2219,6 +2396,21 @@
 
       if (anime.poster) {
         document.getElementById('watchPoster').src = anime.poster;
+      }
+
+      // Immediate status UI initialization from card data
+      updateLibraryStatusUI(anime.user_status, anime.user_score, null, null, anime.is_favorite);
+
+      // Verify favorite status from backend
+      if (anime.title) {
+        fetchJson(`/api/favorite?title=${encodeURIComponent(anime.title)}`).then(favRes => {
+          if (favRes && favRes.status === 'ok') {
+            anime.is_favorite = favRes.is_favorite;
+            const curStatus = (currentMALData && currentMALData.my_list_status) ? currentMALData.my_list_status.status : anime.user_status;
+            const curScore = (currentMALData && currentMALData.my_list_status) ? currentMALData.my_list_status.score : anime.user_score;
+            updateLibraryStatusUI(curStatus, curScore, null, null, anime.is_favorite);
+          }
+        });
       }
 
       // Initial synopsis state
@@ -2241,6 +2433,15 @@
         fetchJson(`/api/details?id=${encodeURIComponent(anime.id)}`).then(res => {
           if (res.status === 'ok') {
             const data = res.data;
+            if (data.title && !anime.title) anime.title = data.title;
+            if (data.poster && !anime.poster) {
+              anime.poster = data.poster;
+              document.getElementById('watchPoster').src = data.poster;
+            }
+            if (data.is_favorite !== undefined) anime.is_favorite = data.is_favorite;
+            if (data.user_status !== undefined) anime.user_status = data.user_status;
+            if (data.user_score !== undefined) anime.user_score = data.user_score;
+
             if (data.mal_id && (!currentAnime.mal_id || !currentMALData || !currentMALData.mal_id)) {
               currentAnime.mal_id = data.mal_id;
               if (!currentMALData || !currentMALData.mal_id) {
@@ -2278,6 +2479,9 @@
       stopVideoPlayer();
       document.getElementById('watchStage').classList.remove('active');
       document.getElementById('catalogStage').style.display = 'block';
+      if (window.location.pathname.startsWith('/watch')) {
+        window.history.pushState({}, '', '/');
+      }
     }
 
     function renderEpisodeSidebar(eps) {
@@ -2319,6 +2523,9 @@
       document.querySelectorAll('.ssl-item').forEach(b => {
         b.classList.toggle('active', b.getAttribute('data-ep') === epNum);
       });
+      if (currentAnime && currentAnime.id) {
+        window.history.replaceState({ animeId: currentAnime.id, ep: epNum }, '', `/watch/${currentAnime.id}?ep=${epNum}`);
+      }
       loadAndStreamEpisode(epNum);
     }
 
@@ -2353,11 +2560,14 @@
     async function toggleWatchFav() {
       if (!currentAnime) return;
       showToast(`Toggling favorite for "${currentAnime.title}"...`);
-      const res = await fetchJson(`/api/favorite?title=${encodeURIComponent(currentAnime.title)}`);
+      const res = await fetchJson(`/api/favorite/toggle?title=${encodeURIComponent(currentAnime.title)}`);
       if (res.status === 'ok') {
         const isFav = res.is_favorite;
+        currentAnime.is_favorite = isFav;
         showToast(isFav ? 'Added to favorites!' : 'Removed from favorites!', false);
-        document.getElementById('btnWatchFav').innerText = isFav ? '⭐ Favorited' : '⭐ Favorite';
+        const curStatus = (currentMALData && currentMALData.my_list_status) ? currentMALData.my_list_status.status : currentAnime.user_status;
+        const curScore = (currentMALData && currentMALData.my_list_status) ? currentMALData.my_list_status.score : currentAnime.user_score;
+        updateLibraryStatusUI(curStatus, curScore, null, null, isFav);
       }
     }
 
@@ -2508,6 +2718,11 @@
           }
 
           const mls = res.data.my_list_status;
+          const userStatus = mls ? mls.status : null;
+          const userScore = mls ? mls.score : 0;
+          const watchedEps = mls ? mls.num_episodes_watched : 0;
+          const totalEps = res.data.num_episodes;
+
           if (mls) {
             const stName = (mls.status || '').replace('_', ' ').toUpperCase();
             const color = mls.status === 'completed' ? '#10b981' : (mls.status === 'watching' ? '#06b6d4' : '#f59e0b');
@@ -2521,6 +2736,8 @@
             document.getElementById('watchMALScoreSelect').value = "0";
             document.getElementById('watchMALWatchedInput').value = "0";
           }
+
+          updateLibraryStatusUI(userStatus, userScore, watchedEps, totalEps, currentAnime ? currentAnime.is_favorite : false);
         } else {
           document.getElementById('watchMALSummary').innerText = "MAL entry not found";
         }
@@ -2564,6 +2781,7 @@
           showToast(`Saved to MAL: ${st.toUpperCase()} with rating ${score}!`, false);
           const color = st === 'completed' ? '#10b981' : (st === 'watching' ? '#06b6d4' : '#f59e0b');
           document.getElementById('watchMALSummary').innerHTML = `Saved: <strong style="color:${color};">${st.toUpperCase()}</strong> • Score: <strong>${score ? score + '/10' : 'None'}</strong> • Watched: <strong>${epsWatched}</strong>`;
+          updateLibraryStatusUI(st, score, epsWatched, currentMALData ? currentMALData.num_episodes : '?', currentAnime ? currentAnime.is_favorite : false);
         } else {
           showToast(`Error: ${data.message || 'Failed to update MAL'}`, false);
         }
@@ -2663,11 +2881,41 @@
       }, 3500);
     }
 
+    // Popstate navigation support (Back/Forward buttons)
+    window.addEventListener('popstate', (e) => {
+      const path = window.location.pathname;
+      const m = path.match(/\/watch\/([a-zA-Z0-9\-_]+)/);
+      if (m) {
+        const watchId = m[1];
+        const params = new URLSearchParams(window.location.search);
+        const ep = params.get('ep') || '1';
+        if (currentAnime && currentAnime.id === watchId) {
+          selectAndPlayEpisode(ep);
+        } else {
+          restoreWatchFromUrl(watchId, ep);
+        }
+      } else {
+        closeWatchView();
+      }
+    });
+
     // Initialize Volume UI
     updateVolumeUI();
 
-    // Default load Latest Updates
-    loadTab('latest');
+    // Check if URL specifies a show (/watch/:id or ?watch=:id or ?id=:id)
+    const urlParams = new URLSearchParams(window.location.search);
+    let initWatchId = urlParams.get('watch') || urlParams.get('id');
+    const initEp = urlParams.get('ep') || '1';
+    if (!initWatchId) {
+      const match = window.location.pathname.match(/\/watch\/([a-zA-Z0-9\-_]+)/);
+      if (match) initWatchId = match[1];
+    }
+
+    if (initWatchId) {
+      restoreWatchFromUrl(initWatchId, initEp);
+    } else {
+      loadTab('latest');
+    }
   </script>
 </body>
 </html>
