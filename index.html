@@ -685,6 +685,11 @@
       color: #02a9ff;
       background: rgba(2, 169, 255, 0.2);
     }
+    .btn-ext-link.btn-malmap:hover {
+      border-color: #8b5cf6;
+      color: #c4b5fd;
+      background: rgba(139, 92, 246, 0.2);
+    }
     .btn-badge-brand {
       font-size: 9.5px;
       font-weight: 800;
@@ -700,6 +705,78 @@
     .anilist-badge {
       background: #02a9ff;
       color: #fff;
+    }
+    .malmap-badge {
+      background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+      color: #fff;
+    }
+    .recs-filter-tabs {
+      display: inline-flex;
+      align-items: center;
+      background: #181724;
+      border: 1px solid #2d2c3e;
+      border-radius: 24px;
+      padding: 3px;
+      gap: 4px;
+    }
+    .recs-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.18s ease;
+      font-family: inherit;
+    }
+    .recs-tab-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .recs-tab-btn.active {
+      background: #2b2a3d;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    .recs-count-pill {
+      background: rgba(255, 255, 255, 0.1);
+      color: #e5e7eb;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 10px;
+      line-height: 1.3;
+    }
+    .recs-tab-btn.active .recs-count-pill {
+      background: var(--accent-color);
+      color: #111;
+    }
+    .card-malmap-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(139, 92, 246, 0.18);
+      border: 1px solid rgba(139, 92, 246, 0.4);
+      color: #c4b5fd;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      margin-left: auto;
+    }
+    .card-malmap-badge:hover {
+      background: #8b5cf6;
+      color: #fff;
+      border-color: #8b5cf6;
+      transform: scale(1.05);
+      box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
     }
     .btn-ext-link i {
       font-size: 10px;
@@ -1780,6 +1857,11 @@
             <span>AniList</span>
             <i class="fas fa-external-link-alt"></i>
           </a>
+          <a id="btnLinkMALMap" class="btn-ext-link btn-malmap" href="https://sampom100.github.io/MAL-Map/" target="_blank" rel="noopener noreferrer" title="Explore on MAL-Map">
+            <span class="btn-badge-brand malmap-badge">MAP</span>
+            <span>MAL-Map</span>
+            <i class="fas fa-network-wired"></i>
+          </a>
         </div>
       </div>
 
@@ -1974,19 +2056,36 @@
 
       <!-- RECOMMENDED SHOWS SECTION -->
       <div class="watch-recs-wrap" id="watchRecsWrap">
-        <div class="section-header" style="margin-bottom: 18px;">
+        <div class="section-header" style="margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
           <div class="section-title">
             <i class="fas fa-thumbs-up" style="color: var(--accent-color);"></i>
-            <span>Recommended for You</span>
-            <span class="badge-source-pill"><i class="fas fa-layer-group"></i> MAL & AniList</span>
+            <span>Recommended Shows</span>
           </div>
-          <div class="section-count" id="watchRecsCount">Loading recommendations...</div>
+
+          <!-- SOURCE SELECTOR TABS -->
+          <div class="recs-filter-tabs">
+            <button class="recs-tab-btn active" id="tabRecsMAL" onclick="switchRecsTab('mal')">
+              <span class="btn-badge-brand mal-badge">MAL</span>
+              <span>MyAnimeList</span>
+              <span class="recs-count-pill" id="countRecsMAL">0</span>
+            </button>
+            <button class="recs-tab-btn" id="tabRecsAniList" onclick="switchRecsTab('anilist')">
+              <span class="btn-badge-brand anilist-badge">AL</span>
+              <span>AniList</span>
+              <span class="recs-count-pill" id="countRecsAniList">0</span>
+            </button>
+            <button class="recs-tab-btn" id="tabRecsBoth" onclick="switchRecsTab('both')">
+              <i class="fas fa-layer-group"></i>
+              <span>All Combined</span>
+              <span class="recs-count-pill" id="countRecsBoth">0</span>
+            </button>
+          </div>
         </div>
 
         <div class="grid" id="watchRecsGrid">
           <div class="empty-state">
             <div class="spinner" style="margin: 0 auto 12px;"></div>
-            Loading recommendations from MAL & AniList...
+            Loading recommendations from MyAnimeList & AniList...
           </div>
         </div>
       </div>
@@ -2802,6 +2901,9 @@
               renderWatchAiringCountdown(data);
             }
 
+            if (data.mal_map_url) currentAnime.mal_map_url = data.mal_map_url;
+            updateExternalLinks(data.mal_id || currentAnime.mal_id, currentAnime.title, currentAnime.mal_map_url);
+
             if (data.mal_id && (!currentAnime.mal_id || !currentMALData || !currentMALData.mal_id)) {
               currentAnime.mal_id = data.mal_id;
               if (!currentMALData || !currentMALData.mal_id) {
@@ -3049,15 +3151,28 @@
     }
 
     /* EXTERNAL DATABASE LINKS */
-    function updateExternalLinks(malId, title) {
+    function updateExternalLinks(malId, title, malMapUrl) {
       const malLink = document.getElementById('btnLinkMAL');
       const alLink = document.getElementById('btnLinkAniList');
+      const mapLink = document.getElementById('btnLinkMALMap');
       const t = title || (currentAnime ? currentAnime.title : '');
       if (malLink) {
         malLink.href = malId ? `https://myanimelist.net/anime/${malId}` : `https://myanimelist.net/anime.php?q=${encodeURIComponent(t)}`;
       }
       if (alLink) {
         alLink.href = `https://anilist.co/search/anime?search=${encodeURIComponent(t)}`;
+      }
+      if (mapLink) {
+        if (malMapUrl) {
+          mapLink.href = malMapUrl;
+        } else if (currentAnime && currentAnime.mal_map_url) {
+          mapLink.href = currentAnime.mal_map_url;
+        } else if (t) {
+          const canon = t.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          mapLink.href = `https://sampom100.github.io/MAL-Map/#show=${encodeURIComponent(canon)}`;
+        } else {
+          mapLink.href = 'https://sampom100.github.io/MAL-Map/';
+        }
       }
     }
 
@@ -3169,81 +3284,126 @@
       }
     }
 
-    /* MERGED RECOMMENDATIONS (MAL & ANILIST) */
+    /* RECOMMENDATIONS (SEPARATED MAL & ANILIST + MAL-MAP) */
+    let currentRecsData = { mal: [], anilist: [], both: [] };
+    let activeRecsTab = 'mal';
+
+    function switchRecsTab(tab) {
+      activeRecsTab = tab;
+      document.querySelectorAll('.recs-tab-btn').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById(tab === 'mal' ? 'tabRecsMAL' : (tab === 'anilist' ? 'tabRecsAniList' : 'tabRecsBoth'));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const items = activeRecsTab === 'mal' ? currentRecsData.mal : (activeRecsTab === 'anilist' ? currentRecsData.anilist : currentRecsData.both);
+      renderRecsGrid(items);
+    }
+
+    function renderRecsGrid(items) {
+      const grid = document.getElementById('watchRecsGrid');
+      if (!grid) return;
+      if (!items || items.length === 0) {
+        const srcLabel = activeRecsTab === 'mal' ? 'MyAnimeList' : (activeRecsTab === 'anilist' ? 'AniList' : 'MAL & AniList');
+        grid.innerHTML = `<div class="empty-state">No recommendations found from ${srcLabel} for this anime.</div>`;
+        return;
+      }
+
+      grid.innerHTML = items.map(anime => {
+        const isFav = anime.is_favorite;
+        const isWatch = anime.is_watching;
+        const isComp = anime.is_completed;
+        const cardClasses = `card ${isFav ? 'is-fav' : ''} ${isWatch ? 'is-watching' : ''} ${isComp ? 'is-completed' : ''}`.trim();
+        const poster = anime.poster || 'https://hianime.at/theme/images/no-image.jpg';
+
+        let sourceBadgeHtml = '';
+        if (anime.source_label === 'MAL & AniList') {
+          sourceBadgeHtml = '<span class="rec-source-badge rec-source-both">MAL & AniList</span>';
+        } else if (anime.source_label === 'AniList') {
+          sourceBadgeHtml = '<span class="rec-source-badge rec-source-anilist">AniList</span>';
+        } else {
+          sourceBadgeHtml = '<span class="rec-source-badge rec-source-mal">MAL</span>';
+        }
+
+        const malMapLink = anime.mal_map_url || (anime.title ? `https://sampom100.github.io/MAL-Map/#show=${encodeURIComponent(anime.title.toLowerCase().replace(/[^a-z0-9]/g, '_'))}` : 'https://sampom100.github.io/MAL-Map/');
+
+        return `
+          <div class="${cardClasses}" onclick='handleCardClick(${JSON.stringify(anime).replace(/'/g, "&apos;")})'>
+            <div class="poster-wrap">
+              <img src="${poster}" alt="${anime.title}" loading="lazy" referrerpolicy="no-referrer">
+              
+              <div class="poster-overlay">
+                <div class="overlay-play-circle"><i class="fas fa-play"></i></div>
+              </div>
+
+              <div class="card-top-badges">
+                ${sourceBadgeHtml}
+                ${isFav ? '<span class="badge-status badge-fav-tag">⭐ FAV</span>' : ''}
+                ${isWatch ? '<span class="badge-status badge-watch-tag">📺 WATCHING</span>' : ''}
+                ${isComp ? `<span class="badge-status badge-completed-tag">✓ WATCHED${anime.user_score ? ` (${anime.user_score}/10)` : ''}</span>` : ''}
+              </div>
+
+              ${anime.score && anime.score !== '-' ? `
+                <div class="badge-score-pill">
+                  <i class="fas fa-star"></i>
+                  <span>${anime.score}</span>
+                </div>
+              ` : ''}
+
+              <div class="tick-bottom-row">
+                <span class="tick-item tick-eps">${anime.eps || '?'} Eps</span>
+              </div>
+            </div>
+
+            <div class="card-info">
+              <div class="card-title" title="${anime.title}">${anime.title}</div>
+              <div class="card-meta">
+                <span style="color: #bbb;">${anime.source_label || 'Anime'}</span>
+                ${anime.score && anime.score !== '-' ? `<span style="color:#fbbf24; font-weight:700;"><i class="fas fa-star"></i> ${anime.score}</span>` : ''}
+                <a href="${malMapLink}" target="_blank" rel="noopener noreferrer" class="card-malmap-badge" onclick="event.stopPropagation();" title="View in MAL-Map graph">
+                  <i class="fas fa-network-wired"></i> MAP
+                </a>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
     async function loadRecommendations(malId, animeId, title) {
       const grid = document.getElementById('watchRecsGrid');
-      const countEl = document.getElementById('watchRecsCount');
       if (!grid) return;
 
-      countEl.innerText = "Finding recommendations...";
-      grid.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Finding recommendations from MAL & AniList...</div>';
+      grid.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Loading recommendations from MyAnimeList & AniList...</div>';
 
       const p = new URLSearchParams();
       if (malId) p.set('mal_id', malId);
       if (animeId) p.set('anime_id', animeId);
       if (title) p.set('title', title);
-      p.set('limit', '10');
+      p.set('limit', '30');
 
       const res = await fetchJson(`/api/recommendations?${p.toString()}`);
-      if (res.status === 'ok' && res.results && res.results.length > 0) {
-        countEl.innerText = `${res.results.length} recommended shows`;
-        grid.innerHTML = res.results.map(anime => {
-          const isFav = anime.is_favorite;
-          const isWatch = anime.is_watching;
-          const isComp = anime.is_completed;
-          const cardClasses = `card ${isFav ? 'is-fav' : ''} ${isWatch ? 'is-watching' : ''} ${isComp ? 'is-completed' : ''}`.trim();
-          const poster = anime.poster || 'https://hianime.at/theme/images/no-image.jpg';
+      if (res.status === 'ok') {
+        currentRecsData = {
+          mal: res.mal || [],
+          anilist: res.anilist || [],
+          both: res.results || []
+        };
 
-          let sourceBadgeHtml = '';
-          if (anime.source_label === 'MAL & AniList') {
-            sourceBadgeHtml = '<span class="rec-source-badge rec-source-both">MAL & AniList</span>';
-          } else if (anime.source_label === 'AniList') {
-            sourceBadgeHtml = '<span class="rec-source-badge rec-source-anilist">AniList</span>';
-          } else {
-            sourceBadgeHtml = '<span class="rec-source-badge rec-source-mal">MAL</span>';
-          }
+        const malCountEl = document.getElementById('countRecsMAL');
+        const alCountEl = document.getElementById('countRecsAniList');
+        const bothCountEl = document.getElementById('countRecsBoth');
+        if (malCountEl) malCountEl.innerText = currentRecsData.mal.length;
+        if (alCountEl) alCountEl.innerText = currentRecsData.anilist.length;
+        if (bothCountEl) bothCountEl.innerText = currentRecsData.both.length;
 
-          return `
-            <div class="${cardClasses}" onclick='handleCardClick(${JSON.stringify(anime).replace(/'/g, "&apos;")})'>
-              <div class="poster-wrap">
-                <img src="${poster}" alt="${anime.title}" loading="lazy" referrerpolicy="no-referrer">
-                
-                <div class="poster-overlay">
-                  <div class="overlay-play-circle"><i class="fas fa-play"></i></div>
-                </div>
-
-                <div class="card-top-badges">
-                  ${sourceBadgeHtml}
-                  ${isFav ? '<span class="badge-status badge-fav-tag">⭐ FAV</span>' : ''}
-                  ${isWatch ? '<span class="badge-status badge-watch-tag">📺 WATCHING</span>' : ''}
-                  ${isComp ? `<span class="badge-status badge-completed-tag">✓ WATCHED${anime.user_score ? ` (${anime.user_score}/10)` : ''}</span>` : ''}
-                </div>
-
-                ${anime.score && anime.score !== '-' ? `
-                  <div class="badge-score-pill">
-                    <i class="fas fa-star"></i>
-                    <span>${anime.score}</span>
-                  </div>
-                ` : ''}
-
-                <div class="tick-bottom-row">
-                  <span class="tick-item tick-eps">${anime.eps || '?'} Eps</span>
-                </div>
-              </div>
-
-              <div class="card-info">
-                <div class="card-title" title="${anime.title}">${anime.title}</div>
-                <div class="card-meta">
-                  <span style="color: #bbb;">${anime.source_label}</span>
-                  ${anime.score && anime.score !== '-' ? `<span style="color:#fbbf24; font-weight:700;"><i class="fas fa-star"></i> ${anime.score}</span>` : ''}
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('');
+        if (currentRecsData.mal.length > 0) {
+          switchRecsTab('mal');
+        } else if (currentRecsData.anilist.length > 0) {
+          switchRecsTab('anilist');
+        } else {
+          switchRecsTab('both');
+        }
       } else {
-        countEl.innerText = "0 recommendations";
-        grid.innerHTML = '<div class="empty-state">No recommendations found for this show on MAL or AniList.</div>';
+        grid.innerHTML = '<div class="empty-state">No recommendations found for this show on MyAnimeList or AniList.</div>';
       }
     }
 

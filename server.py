@@ -34,6 +34,27 @@ CACHE = {}
 AIRING_CACHE = {}
 MAL_TOKEN_CACHE = {"access_token": None, "expires_at": 0}
 
+MAL_MAP_FILE = "/Users/sampomerantz/MAL-Map/data-collection/data/min_metadata.json"
+MAL_MAP_METADATA = {}
+if os.path.exists(MAL_MAP_FILE):
+    try:
+        with open(MAL_MAP_FILE, "r") as f:
+            MAL_MAP_METADATA = json.load(f)
+    except Exception:
+        MAL_MAP_METADATA = {}
+
+def get_mal_map_url(mal_id=None, title=None, alt_title=None):
+    if mal_id and str(mal_id) in MAL_MAP_METADATA:
+        t = MAL_MAP_METADATA[str(mal_id)].get("title", "")
+        if t:
+            c = re.sub(r'[^a-z0-9]', '_', t.lower())
+            return f"https://sampom100.github.io/MAL-Map/#show={c}"
+    for cand in [alt_title, title]:
+        if cand:
+            c = re.sub(r'[^a-z0-9]', '_', cand.lower())
+            return f"https://sampom100.github.io/MAL-Map/#show={c}"
+    return "https://sampom100.github.io/MAL-Map/"
+
 def get_secrets():
     secrets = {}
     if os.path.exists(SECRETS_FILE):
@@ -672,7 +693,8 @@ def get_anime_details_and_episodes(anime_id):
         "episodes": episodes,
         "overview": final_overview,
         "genres": [html.unescape(g) for g in genres_m],
-        "score": score_m.group(1) if score_m else mal_info.get("score", "N/A")
+        "score": score_m.group(1) if score_m else mal_info.get("score", "N/A"),
+        "mal_map_url": get_mal_map_url(mal_id, title, jp_title)
     }
 
     airing = get_anime_airing_info(title, [jp_title] if jp_title else None)
@@ -856,7 +878,7 @@ def update_mal_anime_status(mal_id, status, score=None, num_watched_episodes=Non
         CACHE.pop("user_sets", None)
         return result
 
-def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=10):
+def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=30):
     if mal_id:
         try:
             mal_id = int(mal_id)
@@ -892,15 +914,43 @@ def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=1
             for r in data.get("recommendations", []):
                 node = r.get("node", {})
                 if node and node.get("id"):
+                    m_id = node.get("id")
+                    t = node.get("title")
                     mal_recs.append({
-                        "mal_id": node.get("id"),
-                        "title": node.get("title"),
+                        "mal_id": m_id,
+                        "title": t,
                         "poster": node.get("main_picture", {}).get("large") or node.get("main_picture", {}).get("medium") or "",
                         "votes": r.get("num_recommendations", 0),
-                        "source": "MAL"
+                        "source": "MAL",
+                        "source_label": "MAL",
+                        "mal_map_url": get_mal_map_url(m_id, t)
                     })
         except Exception as e:
             print(f"[get_combined_recommendations] MAL recs error: {e}")
+
+        # Supplement with MAL-Map metadata recommendations to show 25-30+ shows
+        if mal_id and str(mal_id) in MAL_MAP_METADATA:
+            existing_ids = {r["mal_id"] for r in mal_recs if r.get("mal_id")}
+            mm_recs = MAL_MAP_METADATA[str(mal_id)].get("recommendations", [])
+            mm_sorted = sorted(mm_recs, key=lambda x: x.get("count", 0), reverse=True)
+            for item in mm_sorted:
+                rid = item.get("id")
+                if rid and rid not in existing_ids:
+                    s_rid = str(rid)
+                    if s_rid in MAL_MAP_METADATA:
+                        meta_node = MAL_MAP_METADATA[s_rid]
+                        t = meta_node.get("englishTitle") or meta_node.get("title")
+                        mal_recs.append({
+                            "mal_id": rid,
+                            "title": t,
+                            "poster": meta_node.get("picture", ""),
+                            "score": str(meta_node.get("score") or "-"),
+                            "votes": item.get("count", 0),
+                            "source": "MAL",
+                            "source_label": "MAL",
+                            "mal_map_url": get_mal_map_url(rid, meta_node.get("title"))
+                        })
+                        existing_ids.add(rid)
 
     def fetch_anilist():
         nonlocal anilist_recs
@@ -908,7 +958,7 @@ def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=1
             query = """
             query ($idMal: Int, $search: String) {
               Media (idMal: $idMal, search: $search, type: ANIME) {
-                recommendations (perPage: 15, sort: RATING_DESC) {
+                recommendations (perPage: 35, sort: RATING_DESC) {
                   nodes {
                     rating
                     mediaRecommendation {
@@ -947,8 +997,9 @@ def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=1
                         t = mr.get("title", {})
                         chosen_title = t.get("english") or t.get("romaji") or ""
                         score_val = str(round(mr.get("averageScore", 0) / 10, 1)) if mr.get("averageScore") else "-"
+                        m_id = mr.get("idMal")
                         anilist_recs.append({
-                            "mal_id": mr.get("idMal"),
+                            "mal_id": m_id,
                             "anilist_id": mr.get("id"),
                             "title": chosen_title,
                             "alt_title": t.get("romaji") if chosen_title != t.get("romaji") else t.get("english"),
@@ -956,7 +1007,9 @@ def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=1
                             "score": score_val,
                             "eps": str(mr.get("episodes") or "?"),
                             "votes": n.get("rating", 0),
-                            "source": "AniList"
+                            "source": "AniList",
+                            "source_label": "AniList",
+                            "mal_map_url": get_mal_map_url(m_id, chosen_title, t.get("romaji"))
                         })
         except Exception as e:
             print(f"[get_combined_recommendations] AniList recs error: {e}")
@@ -966,6 +1019,14 @@ def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=1
         f2 = executor.submit(fetch_anilist)
         f1.result()
         f2.result()
+
+    favs, watching, completed, all_by_clean, all_by_id = get_user_status_sets()
+
+    for r in mal_recs:
+        tag_card_status(r, favs, watching, completed, all_by_id)
+
+    for r in anilist_recs:
+        tag_card_status(r, favs, watching, completed, all_by_id)
 
     merged_map = {}
     for r in mal_recs:
@@ -980,7 +1041,8 @@ def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=1
             "eps": "?",
             "sources": ["MAL"],
             "votes": r.get("votes", 0),
-            "source_label": "MAL"
+            "source_label": "MAL",
+            "mal_map_url": r.get("mal_map_url")
         }
 
     for r in anilist_recs:
@@ -1021,7 +1083,8 @@ def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=1
                 "eps": r.get("eps", "?"),
                 "sources": ["AniList"],
                 "votes": r.get("votes", 0),
-                "source_label": "AniList"
+                "source_label": "AniList",
+                "mal_map_url": r.get("mal_map_url")
             }
 
     def sort_score(item):
@@ -1031,12 +1094,17 @@ def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=1
     sorted_recs = sorted(merged_map.values(), key=sort_score, reverse=True)
     final_recs = sorted_recs[:limit]
 
-    favs, watching, completed, all_by_clean, all_by_id = get_user_status_sets()
     for rec in final_recs:
         tag_card_status(rec, favs, watching, completed, all_by_id)
 
-    CACHE[cache_key] = {"ts": time.time(), "data": final_recs}
-    return final_recs
+    response_data = {
+        "mal": mal_recs[:limit],
+        "anilist": anilist_recs[:limit],
+        "results": final_recs
+    }
+
+    CACHE[cache_key] = {"ts": time.time(), "data": response_data}
+    return response_data
 
 def get_favorites_list():
     if not os.path.exists(FAV_FILE):
@@ -1487,14 +1555,19 @@ class RequestHandler(BaseHTTPRequestHandler):
             title = params.get("title", [None])[0]
             mal_id = params.get("mal_id", [None])[0]
             anime_id = params.get("anime_id", [None])[0]
-            limit_str = params.get("limit", ["10"])[0]
+            limit_str = params.get("limit", ["30"])[0]
             try:
                 limit = int(limit_str)
             except Exception:
-                limit = 10
+                limit = 30
             try:
                 data = get_combined_recommendations(mal_id=mal_id, anime_id=anime_id, title=title, limit=limit)
-                self._send_json({"status": "ok", "results": data})
+                self._send_json({
+                    "status": "ok",
+                    "mal": data.get("mal", []),
+                    "anilist": data.get("anilist", []),
+                    "results": data.get("results", [])
+                })
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, 500)
             return
