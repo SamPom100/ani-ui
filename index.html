@@ -476,6 +476,95 @@
       justify-content: space-between;
     }
 
+    .card-countdown-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 7px;
+      border-radius: 4px;
+      width: fit-content;
+      margin-top: 2px;
+      line-height: 1.2;
+      background: rgba(16, 185, 129, 0.16);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      transition: all 0.2s ease;
+    }
+    .card-countdown-pill.soon {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      animation: pulseCountdown 2s infinite ease-in-out;
+    }
+    .card-countdown-pill.completed {
+      background: rgba(255, 255, 255, 0.05);
+      color: #9ca3af;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    @keyframes pulseCountdown {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(0.98); }
+    }
+
+    /* Watch Page Countdown Banner */
+    .watch-airing-banner {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(90deg, rgba(16, 185, 129, 0.18) 0%, rgba(6, 182, 212, 0.12) 100%);
+      border: 1px solid rgba(52, 211, 153, 0.38);
+      border-radius: 8px;
+      padding: 8px 14px;
+      margin-top: 10px;
+      margin-bottom: 6px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    }
+    .watch-airing-banner.soon {
+      background: linear-gradient(90deg, rgba(245, 158, 11, 0.22) 0%, rgba(239, 68, 68, 0.14) 100%);
+      border-color: rgba(245, 158, 11, 0.5);
+    }
+    .watch-airing-banner.completed {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+    .watch-airing-banner i {
+      font-size: 15px;
+      color: #34d399;
+    }
+    .watch-airing-banner.soon i {
+      color: #fbbf24;
+    }
+    .watch-airing-banner.completed i {
+      color: #9ca3af;
+    }
+    .wcb-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 700;
+      color: #a7f3d0;
+      margin-bottom: 2px;
+    }
+    .watch-airing-banner.soon .wcb-label {
+      color: #fde68a;
+    }
+    .watch-airing-banner.completed .wcb-label {
+      color: #d1d5db;
+    }
+    .wcb-text {
+      font-size: 13.5px;
+      color: #f3f4f6;
+      font-weight: 500;
+    }
+    .wcb-text strong {
+      color: #fff;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      margin-left: 2px;
+    }
+
     /* ==========================================================================
        HIANIME WATCH VIEW (MATCHING https://hianime.at/watch/...)
        ========================================================================== */
@@ -1816,6 +1905,15 @@
             <span id="watchStatusTick" style="display:none; cursor:pointer;" onclick="scrollToMALManager()"></span>
           </div>
 
+          <!-- AIRING COUNTDOWN BANNER -->
+          <div id="watchAiringBanner" class="watch-airing-banner" style="display: none;">
+            <i class="fas fa-clock" id="watchAiringIcon"></i>
+            <div>
+              <div class="wcb-label" id="watchAiringLabel">Next Episode Airing</div>
+              <div class="wcb-text" id="watchAiringText"></div>
+            </div>
+          </div>
+
           <div class="anisc-genres" id="watchGenres"></div>
 
           <div class="anisc-synopsis" id="watchSynopsis">
@@ -2156,6 +2254,96 @@
       }
     }
 
+    /* COUNTDOWN & AIRING HELPERS */
+    function formatLiveCountdown(airingAt) {
+      if (!airingAt) return null;
+      const now = Math.floor(Date.now() / 1000);
+      const diff = airingAt - now;
+      if (diff <= 0) return "Airing now";
+      const days = Math.floor(diff / 86400);
+      const hours = Math.floor((diff % 86400) / 3600);
+      const mins = Math.floor((diff % 3600) / 60);
+      const secs = diff % 60;
+      if (days > 0) {
+        return `${days}d ${hours}h ${mins}m ${secs}s`;
+      } else if (hours > 0) {
+        return `${hours}h ${mins}m ${secs}s`;
+      } else {
+        return `${mins}m ${secs}s`;
+      }
+    }
+
+    function renderWatchAiringCountdown(info) {
+      const banner = document.getElementById('watchAiringBanner');
+      const txt = document.getElementById('watchAiringText');
+      const label = document.getElementById('watchAiringLabel');
+      const icon = document.getElementById('watchAiringIcon');
+      if (!banner || !txt) return;
+
+      if (!info || (!info.airing_at && info.airing_status !== 'FINISHED' && !info.countdown)) {
+        banner.style.display = 'none';
+        return;
+      }
+
+      banner.style.display = 'inline-flex';
+      banner.className = 'watch-airing-banner';
+
+      if (info.airing_at) {
+        const now = Math.floor(Date.now() / 1000);
+        const diff = info.airing_at - now;
+        if (diff < 86400) {
+          banner.classList.add('soon');
+          icon.className = 'fas fa-stopwatch';
+        } else {
+          icon.className = 'fas fa-clock';
+        }
+        label.innerText = 'Next Episode Airing';
+        const live = formatLiveCountdown(info.airing_at);
+        txt.innerHTML = `Episode ${info.next_ep || ''} airs in <strong>${live}</strong>`;
+      } else if (info.airing_status === 'FINISHED' || (info.countdown && info.countdown.startsWith('Completed'))) {
+        banner.classList.add('completed');
+        icon.className = 'fas fa-check-circle';
+        label.innerText = 'Series Status';
+        txt.innerHTML = `<strong>${info.countdown || 'Completed'}</strong>`;
+      } else if (info.countdown) {
+        icon.className = 'fas fa-info-circle';
+        label.innerText = 'Release Status';
+        txt.innerHTML = `<strong>${info.countdown}</strong>`;
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    function updateAllCountdowns() {
+      // 1. Update watch view banner if active
+      if (currentAnime && currentAnime.airing_at) {
+        const live = formatLiveCountdown(currentAnime.airing_at);
+        const txtEl = document.getElementById('watchAiringText');
+        if (txtEl && live) {
+          txtEl.innerHTML = `Episode ${currentAnime.next_ep || ''} airs in <strong>${live}</strong>`;
+        }
+      }
+
+      // 2. Update card countdown badges
+      document.querySelectorAll('.card-countdown-pill[data-airing-at]').forEach(el => {
+        const ts = parseInt(el.getAttribute('data-airing-at'));
+        const ep = el.getAttribute('data-ep');
+        if (ts && !isNaN(ts)) {
+          const live = formatLiveCountdown(ts);
+          const span = el.querySelector('.countdown-val');
+          if (span && live) {
+            span.innerText = `Ep ${ep} in ${live}`;
+          }
+          const now = Math.floor(Date.now() / 1000);
+          if (ts - now < 86400) {
+            el.classList.add('soon');
+          }
+        }
+      });
+    }
+
+    setInterval(updateAllCountdowns, 1000);
+
     /* TABS */
     async function loadTab(tabName) {
       currentTab = tabName;
@@ -2307,6 +2495,12 @@
 
                 <div class="card-info">
                   <div class="card-title" title="${anime.title}">${anime.title}</div>
+                  ${anime.countdown ? `
+                    <div class="card-countdown-pill ${anime.airing_at ? ((anime.airing_at - (Date.now()/1000) < 86400) ? 'soon' : '') : (anime.airing_status === 'FINISHED' ? 'completed' : '')}" data-airing-at="${anime.airing_at || ''}" data-ep="${anime.next_ep || ''}">
+                      <i class="fas ${anime.airing_status === 'FINISHED' ? 'fa-check' : 'fa-clock'}"></i>
+                      <span class="countdown-val">${anime.countdown}</span>
+                    </div>
+                  ` : ''}
                   <div class="card-meta">
                     <span>${anime.type || 'Anime'}</span>
                     ${anime.score && anime.score !== '-' ? `<span style="color:#fbbf24; font-weight:700;"><i class="fas fa-star"></i> ${anime.score}</span>` : ''}
@@ -2557,6 +2751,7 @@
 
       // Immediate status UI initialization from card data
       updateLibraryStatusUI(anime.user_status, anime.user_score, null, null, anime.is_favorite);
+      renderWatchAiringCountdown(anime);
 
       // Verify favorite status from backend
       if (anime.title) {
@@ -2599,6 +2794,14 @@
             if (data.user_status !== undefined) anime.user_status = data.user_status;
             if (data.user_score !== undefined) anime.user_score = data.user_score;
 
+            if (data.airing_at !== undefined || data.countdown !== undefined) {
+              currentAnime.airing_at = data.airing_at;
+              currentAnime.next_ep = data.next_ep;
+              currentAnime.countdown = data.countdown;
+              currentAnime.airing_status = data.airing_status;
+              renderWatchAiringCountdown(data);
+            }
+
             if (data.mal_id && (!currentAnime.mal_id || !currentMALData || !currentMALData.mal_id)) {
               currentAnime.mal_id = data.mal_id;
               if (!currentMALData || !currentMALData.mal_id) {
@@ -2634,6 +2837,7 @@
 
     function closeWatchView() {
       stopVideoPlayer();
+      renderWatchAiringCountdown(null);
       document.getElementById('watchStage').classList.remove('active');
       document.getElementById('catalogStage').style.display = 'block';
       if (window.location.pathname.startsWith('/watch')) {

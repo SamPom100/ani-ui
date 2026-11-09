@@ -26,10 +26,12 @@ BASE_URL = "https://hianime.at"
 STATE_DIR = os.path.expanduser(os.environ.get("ANI_CLI_HIST_DIR", "~/.local/state/ani-cli"))
 HIST_FILE = os.path.join(STATE_DIR, "ani-hsts")
 FAV_FILE = os.path.join(STATE_DIR, "favorites.txt")
+FAV_CACHE_FILE = os.path.join(STATE_DIR, "favorites_cache.json")
 SECRETS_FILE = os.path.expanduser("~/.secrets.env")
 
 # In-memory caches
 CACHE = {}
+AIRING_CACHE = {}
 MAL_TOKEN_CACHE = {"access_token": None, "expires_at": 0}
 
 def get_secrets():
@@ -109,6 +111,175 @@ RESOLVED_MAL_IDS = {}
 
 def clean_title(title):
     return re.sub(r'[^a-zA-Z0-9]', '', title).lower()
+
+def clean_for_search(title):
+    if not title:
+        return ""
+    t = re.sub(r'\(.*?\)', '', title)
+    t = re.sub(r'\[.*?\]', '', t)
+    t = re.sub(r'\b(lv|season\s*\d+|part\s*\d+)\b', '', t, flags=re.IGNORECASE)
+    return t.strip()
+
+def format_countdown_str(seconds, status=None, total_eps=None, next_ep=None):
+    if status == "FINISHED":
+        return f"Completed ({total_eps or '?'} eps)" if total_eps else "Completed"
+    if status == "NOT_YET_RELEASED":
+        return "Upcoming"
+    if seconds is None:
+        return status or None
+    if seconds <= 0:
+        return f"Ep {next_ep} Airing now" if next_ep else "Airing now"
+    days = int(seconds) // 86400
+    hours = (int(seconds) % 86400) // 3600
+    mins = (int(seconds) % 3600) // 60
+    if days > 0:
+        cd = f"{days}d {hours}h"
+    elif hours > 0:
+        cd = f"{hours}h {mins}m"
+    else:
+        cd = f"{mins}m"
+    return f"Ep {next_ep} in {cd}" if next_ep else f"in {cd}"
+
+def get_anime_airing_info(title, alt_titles=None):
+    if not title:
+        return None
+    c_title = clean_title(title)
+    now_ts = time.time()
+
+    # 1. In-memory cache
+    if c_title in AIRING_CACHE:
+        entry = AIRING_CACHE[c_title]
+        if now_ts - entry.get("updated_at", 0) < 1800:
+            airing_at = entry.get("airing_at")
+            diff = int(airing_at - now_ts) if airing_at else (999999999 if entry.get("status") == "FINISHED" else None)
+            return {
+                **entry,
+                "time_until": diff,
+                "countdown": format_countdown_str(diff if airing_at else None, status=entry.get("status"), total_eps=entry.get("episodes"), next_ep=entry.get("next_ep"))
+            }
+
+    # 2. Check favorites_cache.json
+    fav_cache = {}
+    if os.path.exists(FAV_CACHE_FILE):
+        try:
+            with open(FAV_CACHE_FILE, "r") as f:
+                fav_cache = json.load(f)
+        except Exception:
+            pass
+
+    candidates = [title]
+    if alt_titles:
+        for at in alt_titles:
+            if at and at not in candidates:
+                candidates.append(at)
+
+    for cand in candidates:
+        cand_c = clean_title(cand)
+        for k, v in fav_cache.items():
+            if clean_title(k) == cand_c or clean_title(v.get("display_title", "")) == cand_c:
+                airing_at = v.get("airing_at")
+                updated_at = v.get("updated_at", 0)
+                if (airing_at and airing_at > now_ts) or v.get("status") == "FINISHED":
+                    diff = int(airing_at - now_ts) if airing_at else (999999999 if v.get("status") == "FINISHED" else None)
+                    res = {
+                        "next_ep": v.get("next_ep"),
+                        "airing_at": airing_at,
+                        "status": v.get("status"),
+                        "episodes": v.get("episodes"),
+                        "updated_at": updated_at,
+                        "time_until": diff,
+                        "countdown": format_countdown_str(diff if airing_at else None, status=v.get("status"), total_eps=v.get("episodes"), next_ep=v.get("next_ep"))
+                    }
+                    AIRING_CACHE[c_title] = res
+                    return res
+
+    # 3. AniList GraphQL lookup
+    search_queries = []
+    for cand in candidates:
+        if cand and cand not in search_queries:
+            search_queries.append(cand)
+        cl = clean_for_search(cand)
+        if cl and cl not in search_queries:
+            search_queries.append(cl)
+
+    query = """
+    query ($search: String) {
+      Media(search: $search, type: ANIME) {
+        id
+        title {
+          english
+          romaji
+        }
+        status
+        episodes
+        nextAiringEpisode {
+          episode
+          timeUntilAiring
+          airingAt
+        }
+      }
+    }
+    """
+
+    for sq in search_queries:
+        try:
+            req = urllib.request.Request(
+                "https://graphql.anilist.co",
+                data=json.dumps({"query": query, "variables": {"search": sq}}).encode("utf-8"),
+                headers={"Content-Type": "application/json", "User-Agent": USER_AGENT}
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                media = data.get("data", {}).get("Media")
+                if media:
+                    next_ep_obj = media.get("nextAiringEpisode")
+                    next_ep = next_ep_obj.get("episode") if next_ep_obj else None
+                    airing_at = next_ep_obj.get("airingAt") if next_ep_obj else None
+                    status = media.get("status")
+                    episodes = media.get("episodes")
+                    diff = int(airing_at - now_ts) if airing_at else (999999999 if status == "FINISHED" else 888888888)
+
+                    info = {
+                        "next_ep": next_ep,
+                        "airing_at": airing_at,
+                        "status": status,
+                        "episodes": episodes,
+                        "updated_at": now_ts,
+                        "time_until": diff,
+                        "countdown": format_countdown_str(diff if airing_at else None, status=status, total_eps=episodes, next_ep=next_ep)
+                    }
+                    AIRING_CACHE[c_title] = info
+
+                    if os.path.exists(FAV_CACHE_FILE):
+                        try:
+                            fav_cache[title.lower()] = {
+                                "display_title": media.get("title", {}).get("english") or media.get("title", {}).get("romaji") or title,
+                                "status": status,
+                                "episodes": episodes,
+                                "next_ep": next_ep,
+                                "airing_at": airing_at,
+                                "updated_at": now_ts
+                            }
+                            with open(FAV_CACHE_FILE, "w") as fp:
+                                json.dump(fav_cache, fp, indent=2)
+                        except Exception:
+                            pass
+
+                    return info
+        except Exception:
+            continue
+
+    fallback = {
+        "next_ep": None,
+        "airing_at": None,
+        "status": "UNKNOWN",
+        "episodes": None,
+        "updated_at": now_ts,
+        "time_until": 999999999,
+        "countdown": None
+    }
+    AIRING_CACHE[c_title] = fallback
+    return fallback
 
 def resolve_mal_id_from_anilist(title):
     if not title:
@@ -504,6 +675,14 @@ def get_anime_details_and_episodes(anime_id):
         "score": score_m.group(1) if score_m else mal_info.get("score", "N/A")
     }
 
+    airing = get_anime_airing_info(title, [jp_title] if jp_title else None)
+    if airing:
+        card["next_ep"] = airing.get("next_ep")
+        card["airing_at"] = airing.get("airing_at")
+        card["countdown"] = airing.get("countdown")
+        card["airing_status"] = airing.get("status")
+        card["time_until"] = airing.get("time_until")
+
     favs, watching, completed, all_by_clean, all_by_id = get_user_status_sets()
     card = tag_card_status(card, favs, watching, completed, all_by_id)
     return card
@@ -870,6 +1049,8 @@ def get_favorites_list():
     results = []
     for title in fav_titles:
         card = resolve_title_to_anime(title)
+        alts = [card.get("jp")] if card and card.get("jp") else []
+        airing = get_anime_airing_info(title, alts)
         if card:
             c = {
                 "id": card["id"],
@@ -881,9 +1062,17 @@ def get_favorites_list():
                 "type": "Favorite",
                 "score": card.get("score", "-")
             }
+            if airing:
+                c["next_ep"] = airing.get("next_ep")
+                c["airing_at"] = airing.get("airing_at")
+                c["countdown"] = airing.get("countdown")
+                c["airing_status"] = airing.get("status")
+                c["time_until"] = airing.get("time_until", 999999999)
+            else:
+                c["time_until"] = 999999999
             results.append(tag_card_status(c, favs, watching, completed, all_by_id))
         else:
-            results.append({
+            c = {
                 "id": "",
                 "title": title,
                 "poster": "https://hianime.at/theme/images/logo.png",
@@ -895,7 +1084,18 @@ def get_favorites_list():
                 "is_watching": False,
                 "is_completed": False,
                 "score": "-"
-            })
+            }
+            if airing:
+                c["next_ep"] = airing.get("next_ep")
+                c["airing_at"] = airing.get("airing_at")
+                c["countdown"] = airing.get("countdown")
+                c["airing_status"] = airing.get("status")
+                c["time_until"] = airing.get("time_until", 999999999)
+            else:
+                c["time_until"] = 999999999
+            results.append(c)
+
+    results.sort(key=lambda x: x.get("time_until", 999999999))
     return results
 
 def toggle_favorite(title):
@@ -1305,6 +1505,15 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self._send_json({"status": "ok", "results": favs})
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, 500)
+            return
+
+        if path == "/api/airing":
+            title = params.get("title", [None])[0]
+            if title:
+                data = get_anime_airing_info(title)
+                self._send_json({"status": "ok", "data": data})
+            else:
+                self._send_json({"status": "error", "message": "Missing title"}, 400)
             return
 
         if path == "/api/favorite":
