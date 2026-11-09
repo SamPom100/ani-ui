@@ -770,6 +770,52 @@
       color: #111;
     }
 
+    .pc-dropdown-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
+    .pc-dropdown-menu {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      right: 0;
+      background: #1c1b2b;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 6px;
+      min-width: 125px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .pc-dropdown-item {
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #ccc;
+      border-radius: 5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.15s ease;
+    }
+    .pc-dropdown-item:hover {
+      background: #2a293d;
+      color: #fff;
+    }
+    .pc-dropdown-item.active {
+      background: rgba(255, 186, 222, 0.15);
+      color: var(--accent-color);
+      font-weight: 700;
+    }
+    .pc-dropdown-item.active i {
+      color: var(--accent-color);
+    }
+
     .pc-btn-fav.active {
       background: rgba(245, 158, 11, 0.2);
       border-color: #f59e0b;
@@ -1683,6 +1729,14 @@
             </div>
 
             <div class="pc-right">
+              <!-- Dedicated Quality Selector -->
+              <div class="pc-dropdown-wrap" id="qualityDropdownWrap">
+                <button class="pc-btn pc-btn-quality" id="btnQuality" onclick="toggleQualityMenu(event)" title="Video Quality">
+                  <i class="fas fa-sliders-h"></i> <span id="qualityLabel">Auto</span>
+                </button>
+                <div class="pc-dropdown-menu" id="qualityMenu" style="display: none;"></div>
+              </div>
+
               <button class="pc-btn pc-btn-cc active" id="btnToggleCC" onclick="toggleCaptions()" title="Toggle Captions">
                 <i class="fas fa-closed-captioning"></i> <span id="ccText">CC: ON</span>
               </button>
@@ -1858,6 +1912,9 @@
     let autoPlay = true;
     let autoNext = true;
     let captionsEnabled = true;
+    let qualityLevels = [];
+    let currentQualityLevel = -1; // -1 = Auto
+    let savedQualityPref = localStorage.getItem('ani_ui_quality') || 'Auto';
     let currentVolume = parseFloat(localStorage.getItem('ani_ui_volume') || '1.0');
     let isMuted = localStorage.getItem('ani_ui_muted') === 'true';
 
@@ -1925,6 +1982,106 @@
       applyCaptionsState();
       showToast(captionsEnabled ? 'Captions: ON' : 'Captions: OFF', false);
     }
+
+    /* QUALITY SELECTOR */
+    function toggleQualityMenu(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('qualityMenu');
+      if (!menu) return;
+      const isOpen = menu.style.display !== 'none';
+      menu.style.display = isOpen ? 'none' : 'flex';
+    }
+
+    function setupQualityLevels() {
+      const menu = document.getElementById('qualityMenu');
+      const label = document.getElementById('qualityLabel');
+      if (!menu || !hlsInstance) return;
+
+      qualityLevels = hlsInstance.levels || [];
+      if (qualityLevels.length === 0) {
+        if (label) label.innerText = 'Auto';
+        menu.innerHTML = '<div class="pc-dropdown-item active"><span>Auto</span> <i class="fas fa-check"></i></div>';
+        return;
+      }
+
+      let targetIdx = -1;
+      if (savedQualityPref && savedQualityPref !== 'Auto') {
+        const found = qualityLevels.findIndex(lvl => `${lvl.height}p` === savedQualityPref);
+        if (found !== -1) {
+          targetIdx = found;
+        }
+      }
+
+      hlsInstance.currentLevel = targetIdx;
+      currentQualityLevel = targetIdx;
+      renderQualityMenu();
+    }
+
+    function renderQualityMenu() {
+      const menu = document.getElementById('qualityMenu');
+      const label = document.getElementById('qualityLabel');
+      if (!menu) return;
+
+      let html = '';
+      const isAuto = currentQualityLevel === -1;
+      
+      let autoSuffix = '';
+      if (isAuto && hlsInstance && hlsInstance.currentLevel !== -1 && qualityLevels[hlsInstance.currentLevel]) {
+        autoSuffix = ` (${qualityLevels[hlsInstance.currentLevel].height}p)`;
+      }
+
+      html += `
+        <div class="pc-dropdown-item ${isAuto ? 'active' : ''}" onclick="selectQualityLevel(-1, 'Auto')">
+          <span>Auto${autoSuffix}</span>
+          ${isAuto ? '<i class="fas fa-check"></i>' : ''}
+        </div>
+      `;
+
+      const indexedLevels = qualityLevels.map((lvl, idx) => ({ lvl, idx }));
+      indexedLevels.sort((a, b) => (b.lvl.height || 0) - (a.lvl.height || 0));
+
+      indexedLevels.forEach(({ lvl, idx }) => {
+        const name = lvl.height ? `${lvl.height}p` : (lvl.name || `Quality ${idx+1}`);
+        const isSelected = currentQualityLevel === idx;
+        html += `
+          <div class="pc-dropdown-item ${isSelected ? 'active' : ''}" onclick="selectQualityLevel(${idx}, '${name}')">
+            <span>${name}</span>
+            ${isSelected ? '<i class="fas fa-check"></i>' : ''}
+          </div>
+        `;
+      });
+
+      menu.innerHTML = html;
+
+      if (label) {
+        if (currentQualityLevel === -1) {
+          label.innerText = autoSuffix ? `Auto${autoSuffix}` : 'Auto';
+        } else if (qualityLevels[currentQualityLevel]) {
+          const h = qualityLevels[currentQualityLevel].height;
+          label.innerText = h ? `${h}p` : 'Auto';
+        }
+      }
+    }
+
+    function selectQualityLevel(idx, name) {
+      if (!hlsInstance) return;
+      currentQualityLevel = idx;
+      hlsInstance.currentLevel = idx;
+      savedQualityPref = name;
+      localStorage.setItem('ani_ui_quality', name);
+      renderQualityMenu();
+      const menu = document.getElementById('qualityMenu');
+      if (menu) menu.style.display = 'none';
+      showToast(`Video quality set to ${name}`, false);
+    }
+
+    document.addEventListener('click', (e) => {
+      const wrap = document.getElementById('qualityDropdownWrap');
+      const menu = document.getElementById('qualityMenu');
+      if (menu && wrap && !wrap.contains(e.target)) {
+        menu.style.display = 'none';
+      }
+    });
 
     /* VOLUME CONTROLS */
     function updateVolumeUI() {
@@ -2619,7 +2776,13 @@
             hlsInstance.loadSource(res.stream_proxy);
             hlsInstance.attachMedia(video);
             hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+              setupQualityLevels();
               if (autoPlay) video.play().catch(() => {});
+            });
+            hlsInstance.on(Hls.Events.LEVEL_SWITCHED, () => {
+              if (currentQualityLevel === -1) {
+                renderQualityMenu();
+              }
             });
             hlsInstance.on(Hls.Events.ERROR, (event, data) => {
               if (data.fatal) {
@@ -2674,6 +2837,11 @@
         hlsInstance.destroy();
         hlsInstance = null;
       }
+      qualityLevels = [];
+      const label = document.getElementById('qualityLabel');
+      if (label) label.innerText = 'Quality';
+      const menu = document.getElementById('qualityMenu');
+      if (menu) menu.style.display = 'none';
     }
 
     /* EXTERNAL DATABASE LINKS */
