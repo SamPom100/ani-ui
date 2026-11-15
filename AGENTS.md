@@ -191,6 +191,7 @@ Every anime card rendered across Search, Latest, Schedule, Favorites, and Recomm
   }
   ```
 * `POST /api/play`: Launches playback in local `mpv` player process (optional desktop integration).
+* `POST /api/shutdown` (and `GET /api/shutdown`): Gracefully stops and shuts down the `ani-ui` server process.
 
 ---
 

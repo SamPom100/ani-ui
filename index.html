@@ -185,6 +185,17 @@
       border-color: var(--accent-color);
     }
 
+    .btn-header-kill {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+    .btn-header-kill:hover {
+      background: #ef4444 !important;
+      color: #fff !important;
+      border-color: #ef4444 !important;
+    }
+
     /* NAV TABS */
     .header-tabs {
       display: flex;
@@ -1787,6 +1798,9 @@
         <button class="btn-header-action" onclick="toggleRandom()">
           <i class="fas fa-random"></i> Random
         </button>
+        <button class="btn-header-action btn-header-kill" onclick="killServer()" title="Stop and shutdown ani-ui server">
+          <i class="fas fa-power-off"></i> Kill Server
+        </button>
       </div>
     </div>
 
@@ -2544,6 +2558,27 @@
       } else {
         showToast('Load a catalog tab first!', false);
       }
+    }
+
+    async function killServer() {
+      if (!confirm("Stop and shutdown the ani-ui server?")) return;
+      try {
+        await fetch('/api/shutdown', { method: 'POST' });
+      } catch (e) {
+        // Expected if server process terminates before response is flushed
+      }
+      document.body.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#0f0f17;color:#fff;font-family:system-ui,-apple-system,sans-serif;text-align:center;padding:24px;">
+          <div style="width:72px;height:72px;border-radius:50%;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:20px;color:#ef4444;font-size:32px;">
+            <i class="fas fa-power-off"></i>
+          </div>
+          <h2 style="margin:0 0 8px 0;font-size:24px;font-weight:700;">ani-ui Server Stopped</h2>
+          <p style="color:#94a3b8;font-size:14.5px;max-width:420px;line-height:1.5;margin:0 0 20px 0;">The local server process has been shut down. You can safely close this browser tab.</p>
+          <div style="font-size:12px;color:#64748b;background:#181824;padding:8px 16px;border-radius:8px;border:1px solid #2b2a3c;">
+            To restart, run <code>ani-cli --web</code> or start <code>python3 server.py</code>
+          </div>
+        </div>
+      `;
     }
 
     /* CARD RENDERING */

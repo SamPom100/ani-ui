@@ -16,6 +16,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import subprocess
+import threading
 import concurrent.futures
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -1623,12 +1624,28 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self._send_json({"status": "error", "message": str(e)}, 500)
             return
 
+        if path == "/api/shutdown":
+            self._send_json({"status": "ok", "message": "Server shutting down..."})
+            def _shutdown():
+                time.sleep(0.5)
+                os._exit(0)
+            threading.Thread(target=_shutdown, daemon=True).start()
+            return
+
         self.send_response(404)
         self.end_headers()
 
     def do_POST(self):
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length)
+
+        if self.path == "/api/shutdown":
+            self._send_json({"status": "ok", "message": "Server shutting down..."})
+            def _shutdown():
+                time.sleep(0.5)
+                os._exit(0)
+            threading.Thread(target=_shutdown, daemon=True).start()
+            return
 
         if self.path == "/api/play":
             try:
