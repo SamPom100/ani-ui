@@ -838,22 +838,54 @@
     }
 
     .art-video-player .art-settings {
-      min-width: 270px !important;
+      min-width: 280px !important;
       transition: width 0.18s ease, height 0.18s ease !important;
       border-radius: 8px !important;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
     }
 
-    .art-video-player .art-settings .art-setting-panel .art-setting-item.art-setting-slider-item {
-      height: auto !important;
-      min-height: 80px !important;
+    .art-video-player .art-settings:has(.art-setting-panel.art-current #artCaptionSliderInput) {
+      width: 360px !important;
+      height: 205px !important;
+      min-width: 360px !important;
+      min-height: 205px !important;
       overflow: visible !important;
-      padding: 12px 16px !important;
-      cursor: default !important;
     }
 
-    .art-video-player .art-settings .art-setting-panel .art-setting-item.art-setting-slider-item:hover {
-      background-color: transparent !important;
+    .art-video-player .art-settings .art-setting-panel:has(#artCaptionSliderInput) {
+      overflow: visible !important;
+      height: auto !important;
+    }
+
+    .art-video-player .art-settings .art-setting-panel .art-setting-item:has(#artCaptionSliderInput) {
+      height: auto !important;
+      min-height: 145px !important;
+      overflow: visible !important;
+      padding: 16px 20px 20px 20px !important;
+      cursor: default !important;
+      line-height: normal !important;
+      box-sizing: border-box !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: stretch !important;
+      background: transparent !important;
+    }
+
+    .art-video-player .art-settings .art-setting-panel .art-setting-item:has(#artCaptionSliderInput):hover {
+      background: transparent !important;
+    }
+
+    .art-video-player .art-settings .art-setting-panel .art-setting-item:has(#artCaptionSliderInput) .art-setting-item-left-icon {
+      display: none !important;
+    }
+
+    .art-video-player .art-settings .art-setting-panel .art-setting-item:has(#artCaptionSliderInput) .art-setting-item-right {
+      display: none !important;
+    }
+
+    .art-video-player .art-settings .art-setting-panel .art-setting-item:has(#artCaptionSliderInput) .art-setting-item-left {
+      width: 100% !important;
+      display: block !important;
     }
 
     .player-frame video {
@@ -2288,6 +2320,10 @@
       if (artSlider && parseInt(artSlider.value, 10) !== captionSize) {
         artSlider.value = captionSize;
       }
+      const artVal = document.getElementById('artCaptionSliderVal');
+      if (artVal) {
+        artVal.innerText = `${captionSize}%`;
+      }
       const artTooltip = document.querySelector('.art-setting-item[data-name="art-caption-size"] .art-setting-item-right-tooltip');
       if (artTooltip) {
         artTooltip.innerText = `${captionSize}%`;
@@ -2337,6 +2373,29 @@
     function handleCaptionSizeInput(val) {
       applyCaptionSize(val);
     }
+
+    function handleArtCaptionSliderChange(val, e) {
+      if (e) {
+        e.stopPropagation();
+      }
+      const num = parseInt(val, 10) || 100;
+      const valLabel = document.getElementById('artCaptionSliderVal');
+      if (valLabel) valLabel.innerText = `${num}%`;
+      handleCaptionSizeInput(num);
+    }
+
+    document.addEventListener('input', function(e) {
+      if (e.target && e.target.id === 'artCaptionSliderInput') {
+        e.stopPropagation();
+        handleArtCaptionSliderChange(e.target.value, e);
+      }
+    }, true);
+
+    document.addEventListener('pointerdown', function(e) {
+      if (e.target && e.target.id === 'artCaptionSliderInput') {
+        e.stopPropagation();
+      }
+    }, true);
 
     function applyCaptionsState() {
       const ccBtn = document.getElementById('btnToggleCC');
@@ -3191,6 +3250,13 @@
       // Render loading spinner in episode sidebar
       document.getElementById('watchEpisodesList').innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 10px;"></div>Loading episodes...</div>';
 
+      // Immediately play if episodes were already preloaded (e.g. from URL restore)
+      if (anime.episodes && anime.episodes.length > 0) {
+        allEpisodes = anime.episodes;
+        renderEpisodeSidebar(allEpisodes);
+        loadAndStreamEpisode(selectedEpisode);
+      }
+
       // Load anime details & episodes from HiAnime API
       if (anime.id) {
         fetchJson(`/api/details?id=${encodeURIComponent(anime.id)}`).then(res => {
@@ -3441,31 +3507,45 @@
               icon: '<i class="fas fa-text-height"></i>',
               html: 'Caption Size',
               name: 'art-caption-size',
-              width: 280,
+              width: 360,
               tooltip: `${captionSize}%`,
               selector: [
                 {
                   html: `
-                    <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; cursor: default;" onclick="event.stopPropagation()">
+                    <div style="display: flex; flex-direction: column; gap: 16px; width: 100%; box-sizing: border-box; line-height: normal; cursor: default; padding: 4px 0;" onclick="event.stopPropagation()">
                       <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;">Font Size</span>
-                        <span id="artCaptionSliderVal" style="font-size: 13.5px; color: #FFBADE; font-weight: 700;">${captionSize}%</span>
+                        <span style="font-size: 12px; color: #aaa; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;">Font Size</span>
+                        <span id="artCaptionSliderVal" style="font-size: 15px; color: #FFBADE; font-weight: 700; background: rgba(255,186,222,0.18); padding: 3px 12px; border-radius: 4px;">${captionSize}%</span>
                       </div>
-                      <div style="display: flex; align-items: center; gap: 12px;">
-                        <span style="font-size: 11px; color: #888; font-weight: 700; line-height: 1;">A</span>
-                        <input type="range" class="pc-vol-slider" id="artCaptionSliderInput" min="60" max="220" step="5" value="${captionSize}" style="flex: 1; accent-color: #FFBADE; cursor: pointer; height: 6px; border-radius: 3px;" title="Adjust Caption Size">
-                        <span style="font-size: 17px; color: #fff; font-weight: 700; line-height: 1;">A</span>
+                      <div style="display: flex; align-items: center; gap: 14px;">
+                        <span style="font-size: 12px; color: #888; font-weight: 700; line-height: 1; user-select: none;">A</span>
+                        <input type="range" class="pc-vol-slider" id="artCaptionSliderInput" min="60" max="220" step="5" value="${captionSize}" oninput="handleArtCaptionSliderChange(this.value, event)" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()" ontouchstart="event.stopPropagation()" style="flex: 1; accent-color: #FFBADE; cursor: pointer; height: 6px; border-radius: 3px;" title="Adjust Caption Size">
+                        <span style="font-size: 19px; color: #fff; font-weight: 700; line-height: 1; user-select: none;">A</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #666; font-weight: 500; user-select: none;">
+                        <span>60%</span>
+                        <span>100% (Default)</span>
+                        <span>220%</span>
                       </div>
                     </div>
                   `,
                   mounted: function($item) {
                     $item.className = 'art-setting-item art-setting-slider-item';
-                    $item.style.height = '88px';
+                    $item.style.height = '145px';
+                    $item.style.minHeight = '145px';
                     $item.style.overflow = 'visible';
+                    $item.style.padding = '16px 20px 20px 20px';
                     const parentSettings = $item.closest('.art-settings');
                     if (parentSettings) {
-                      parentSettings.style.height = '145px';
-                      parentSettings.style.width = '280px';
+                      parentSettings.style.height = '205px';
+                      parentSettings.style.minHeight = '205px';
+                      parentSettings.style.width = '360px';
+                      parentSettings.style.minWidth = '360px';
+                    }
+                    const panel = $item.closest('.art-setting-panel');
+                    if (panel) {
+                      panel.style.overflow = 'visible';
+                      panel.dataset.height = '205';
                     }
                     const slider = $item.querySelector('#artCaptionSliderInput');
                     const valTxt = $item.querySelector('#artCaptionSliderVal');
