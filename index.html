@@ -2778,10 +2778,25 @@
 
     setInterval(updateAllCountdowns, 1000);
 
+    function getThumbUrl(url) {
+      if (!url || typeof url !== 'string' || url.startsWith('data:') || url.startsWith('blob:')) {
+        return url || 'https://hianime.at/theme/images/no-image.jpg';
+      }
+      if (url.startsWith('/api/thumb')) return url;
+      return `/api/thumb?url=${encodeURIComponent(url)}`;
+    }
+
     /* TABS */
-    async function loadTab(tabName) {
+    async function loadTab(tabName, shouldPushState = true) {
       currentTab = tabName;
       closeWatchView();
+
+      if (shouldPushState) {
+        const targetUrl = tabName === 'latest' ? '/?tab=latest' : `/?tab=${tabName}`;
+        if (window.location.search !== `?tab=${tabName}` && window.location.pathname !== `/${tabName}`) {
+          window.history.pushState({ tab: tabName }, '', targetUrl);
+        }
+      }
 
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       const activeBtn = document.getElementById(`tab_${tabName}`);
@@ -2808,13 +2823,34 @@
         await renderScheduleView();
       } else if (tabName === 'favorites') {
         titleEl.innerHTML = '<i class="fas fa-star" style="color:#f59e0b;"></i><span>Your Favorites</span>';
-        setCount('Loading favorites...');
-        view.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Reading favorites.txt...</div>';
+
+        // Stale-while-revalidate: instant 0ms paint from localStorage
+        let hasCache = false;
+        try {
+          const cachedJson = localStorage.getItem('ani_ui_cached_favorites');
+          if (cachedJson) {
+            const cachedItems = JSON.parse(cachedJson);
+            if (Array.isArray(cachedItems) && cachedItems.length > 0) {
+              renderGrid(cachedItems);
+              setCount(`${cachedItems.length} favorites saved`);
+              hasCache = true;
+            }
+          }
+        } catch (e) {}
+
+        if (!hasCache) {
+          setCount('Loading favorites...');
+          view.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Loading favorites...</div>';
+        }
+
         const data = await fetchJson('/api/favorites');
         if (data.status === 'ok') {
           renderGrid(data.results);
           setCount(`${data.results.length} favorites saved`);
-        } else {
+          try {
+            localStorage.setItem('ani_ui_cached_favorites', JSON.stringify(data.results));
+          } catch (e) {}
+        } else if (!hasCache) {
           view.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle" style="font-size:24px;color:#ef4444;margin-bottom:8px;"></i><br>Failed to load favorites: ${data.message || 'Server error'}</div>`;
           setCount('Failed to load');
         }
@@ -2933,11 +2969,12 @@
             const isComp = anime.is_completed;
             const cardClasses = `card ${isFav ? 'is-fav' : ''} ${isWatch ? 'is-watching' : ''} ${isComp ? 'is-completed' : ''}`.trim();
             const poster = anime.poster || 'https://hianime.at/theme/images/no-image.jpg';
+            const thumbSrc = getThumbUrl(poster);
 
             return `
               <div class="${cardClasses}" onclick='handleCardClick(${JSON.stringify(anime).replace(/'/g, "&apos;")})'>
                 <div class="poster-wrap">
-                  <img src="${poster}" alt="${anime.title}" loading="lazy" referrerpolicy="no-referrer">
+                  <img src="${thumbSrc}" data-orig="${poster}" alt="${escapeHtml(anime.title)}" loading="lazy" referrerpolicy="no-referrer" onerror="if(!this.dataset.t){this.dataset.t='1';this.src=this.dataset.orig;}">
                   
                   <div class="poster-overlay">
                     <div class="overlay-play-circle"><i class="fas fa-play"></i></div>
@@ -3049,10 +3086,11 @@
       timetable.innerHTML = items.map(it => {
         const rowClasses = `timetable-row ${it.is_favorite ? 'is-fav' : ''} ${it.is_watching ? 'is-watching' : ''} ${it.is_completed ? 'is-completed' : ''}`.trim();
         const posterImg = it.poster || "https://hianime.at/theme/images/no-image.jpg";
+        const thumbSrc = getThumbUrl(posterImg);
 
         return `
           <div class="${rowClasses}" onclick="handleScheduleItemClick('${it.title.replace(/'/g, "\\'")}', '${it.id || ''}')">
-            <img src="${posterImg}" alt="${it.title}" class="schedule-thumb" loading="lazy" referrerpolicy="no-referrer">
+            <img src="${thumbSrc}" data-orig="${posterImg}" alt="${escapeHtml(it.title)}" class="schedule-thumb" loading="lazy" referrerpolicy="no-referrer" onerror="if(!this.dataset.t){this.dataset.t='1';this.src=this.dataset.orig;}">
             <div class="time-badge">${it.time}</div>
             <div class="ep-badge">${it.ep}</div>
             <div class="timetable-info">
@@ -3216,7 +3254,15 @@
       document.getElementById('psCurrentEpNotice').innerText = `Episode ${selectedEpisode}`;
 
       if (anime.poster) {
-        document.getElementById('watchPoster').src = anime.poster;
+        const watchImg = document.getElementById('watchPoster');
+        watchImg.dataset.orig = anime.poster;
+        watchImg.src = getThumbUrl(anime.poster);
+        watchImg.onerror = function() {
+          if (!this.dataset.t) {
+            this.dataset.t = '1';
+            this.src = this.dataset.orig;
+          }
+        };
       }
 
       // Immediate status UI initialization from card data
@@ -3235,8 +3281,15 @@
         });
       }
 
-      // Initial synopsis state
-      document.getElementById('watchSynopsis').innerText = anime.synopsis || "Loading synopsis from MyAnimeList...";
+      // Initial synopsis state (instant from anime or localStorage)
+      const cleanT = (anime.title || '').toLowerCase().trim();
+      let cachedSynopsis = anime.synopsis;
+      if (!cachedSynopsis && cleanT) {
+        try {
+          cachedSynopsis = localStorage.getItem(`mal_desc_${cleanT}`);
+        } catch (e) {}
+      }
+      document.getElementById('watchSynopsis').innerText = cachedSynopsis || "Loading synopsis from MyAnimeList...";
 
       // Reset MAL summary
       document.getElementById('watchMALSummary').innerText = "Checking MAL...";
@@ -3288,8 +3341,11 @@
                 loadMALStatus(data.mal_id, anime.id, anime.title);
               }
             }
-            if (data.overview && !anime.synopsis) {
+            if (data.overview) {
               document.getElementById('watchSynopsis').innerText = data.overview;
+              if (cleanT) {
+                try { localStorage.setItem(`mal_desc_${cleanT}`, data.overview); } catch (e) {}
+              }
             }
             if (data.genres && data.genres.length > 0) {
               document.getElementById('watchGenres').innerHTML = data.genres.map(g => `<span class="genre-tag">${g}</span>`).join('');
@@ -3321,7 +3377,8 @@
       document.getElementById('watchStage').classList.remove('active');
       document.getElementById('catalogStage').style.display = 'block';
       if (window.location.pathname.startsWith('/watch')) {
-        window.history.pushState({}, '', '/');
+        const targetUrl = currentTab ? `/?tab=${currentTab}` : '/?tab=latest';
+        window.history.pushState({ tab: currentTab || 'latest' }, '', targetUrl);
       }
     }
 
@@ -3807,6 +3864,10 @@
           }
           if (res.data.synopsis) {
             document.getElementById('watchSynopsis').innerText = res.data.synopsis;
+            const cleanT = (title || (currentAnime && currentAnime.title) || '').toLowerCase().trim();
+            if (cleanT) {
+              try { localStorage.setItem(`mal_desc_${cleanT}`, res.data.synopsis); } catch (e) {}
+            }
           }
           if (res.data.mean) {
             document.getElementById('watchScoreBadge').innerText = `★ ${res.data.mean}`;
@@ -3939,7 +4000,7 @@
         return `
           <div class="${cardClasses}" onclick='handleCardClick(${JSON.stringify(anime).replace(/'/g, "&apos;")})'>
             <div class="poster-wrap">
-              <img src="${poster}" alt="${anime.title}" loading="lazy" referrerpolicy="no-referrer">
+              <img src="${getThumbUrl(poster)}" data-orig="${poster}" alt="${escapeHtml(anime.title)}" loading="lazy" referrerpolicy="no-referrer" onerror="if(!this.dataset.t){this.dataset.t='1';this.src=this.dataset.orig;}">
               
               <div class="poster-overlay">
                 <div class="overlay-play-circle"><i class="fas fa-play"></i></div>
@@ -4037,8 +4098,16 @@
         } else {
           restoreWatchFromUrl(watchId, ep);
         }
-      } else {
-        closeWatchView();
+        return;
+      }
+
+      closeWatchView();
+      const params = new URLSearchParams(window.location.search);
+      const validTabs = ['latest', 'schedule', 'favorites', 'mal_watching', 'mal_ptw', 'history'];
+      const pathTab = path.replace(/^\//, '');
+      const targetTab = params.get('tab') || (validTabs.includes(pathTab) ? pathTab : (e.state && e.state.tab) || 'latest');
+      if (validTabs.includes(targetTab)) {
+        loadTab(targetTab, false);
       }
     });
 
@@ -4057,10 +4126,16 @@
       if (match) initWatchId = match[1];
     }
 
+    const pathTab = window.location.pathname.replace(/^\//, '');
+    const validTabs = ['latest', 'schedule', 'favorites', 'mal_watching', 'mal_ptw', 'history'];
+    const tabFromUrl = urlParams.get('tab') || (validTabs.includes(pathTab) ? pathTab : null);
+
     if (initWatchId) {
       restoreWatchFromUrl(initWatchId, initEp);
+    } else if (tabFromUrl && validTabs.includes(tabFromUrl)) {
+      loadTab(tabFromUrl, false);
     } else {
-      loadTab('latest');
+      loadTab('latest', false);
     }
   </script>
 </body>

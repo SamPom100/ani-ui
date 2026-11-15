@@ -12,6 +12,7 @@ import base64
 import html
 import datetime
 import shutil
+import hashlib
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -28,12 +29,49 @@ STATE_DIR = os.path.expanduser(os.environ.get("ANI_CLI_HIST_DIR", "~/.local/stat
 HIST_FILE = os.path.join(STATE_DIR, "ani-hsts")
 FAV_FILE = os.path.join(STATE_DIR, "favorites.txt")
 FAV_CACHE_FILE = os.path.join(STATE_DIR, "favorites_cache.json")
+FAV_LIST_CACHE_FILE = os.path.join(STATE_DIR, "favorites_list_cache.json")
+RESOLVE_CACHE_FILE = os.path.join(STATE_DIR, "title_resolve_cache.json")
+MAL_DESCRIPTIONS_CACHE_FILE = os.path.join(STATE_DIR, "mal_descriptions_cache.json")
+THUMB_CACHE_DIR = os.path.join(STATE_DIR, "thumb_cache")
+os.makedirs(THUMB_CACHE_DIR, exist_ok=True)
 SECRETS_FILE = os.path.expanduser("~/.secrets.env")
 
 # In-memory caches
 CACHE = {}
 AIRING_CACHE = {}
 MAL_TOKEN_CACHE = {"access_token": None, "expires_at": 0}
+
+# Persistent title resolution cache
+RESOLVE_CACHE = {}
+if os.path.exists(RESOLVE_CACHE_FILE):
+    try:
+        with open(RESOLVE_CACHE_FILE, "r") as f:
+            RESOLVE_CACHE = json.load(f)
+    except Exception:
+        RESOLVE_CACHE = {}
+
+def save_resolve_cache():
+    try:
+        with open(RESOLVE_CACHE_FILE, "w") as f:
+            json.dump(RESOLVE_CACHE, f, indent=2)
+    except Exception:
+        pass
+
+# Persistent MAL descriptions/synopsis cache
+MAL_DESCRIPTIONS_CACHE = {}
+if os.path.exists(MAL_DESCRIPTIONS_CACHE_FILE):
+    try:
+        with open(MAL_DESCRIPTIONS_CACHE_FILE, "r") as f:
+            MAL_DESCRIPTIONS_CACHE = json.load(f)
+    except Exception:
+        MAL_DESCRIPTIONS_CACHE = {}
+
+def save_mal_descriptions_cache():
+    try:
+        with open(MAL_DESCRIPTIONS_CACHE_FILE, "w") as f:
+            json.dump(MAL_DESCRIPTIONS_CACHE, f, indent=2)
+    except Exception:
+        pass
 
 MAL_MAP_FILE = "/Users/sampomerantz/MAL-Map/data-collection/data/min_metadata.json"
 MAL_MAP_METADATA = {}
@@ -551,9 +589,14 @@ def parse_anime_cards(page_html):
     return cards
 
 def fetch_mal_score_and_synopsis(title):
-    cache_key = f"mal_info_{title.lower()}"
+    clean_k = title.lower().strip()
+    cache_key = f"mal_info_{clean_k}"
     if cache_key in CACHE:
         return CACHE[cache_key]
+    if clean_k in MAL_DESCRIPTIONS_CACHE:
+        res = MAL_DESCRIPTIONS_CACHE[clean_k]
+        CACHE[cache_key] = res
+        return res
 
     secrets = get_secrets()
     client_id = secrets.get("MAL_CLIENT_ID", "ea58d724802b654ee16451f5c377b6cf")
@@ -571,6 +614,8 @@ def fetch_mal_score_and_synopsis(title):
                 synopsis = node.get("synopsis", "")
                 res = {"score": score_str, "synopsis": synopsis}
                 CACHE[cache_key] = res
+                MAL_DESCRIPTIONS_CACHE[clean_k] = res
+                save_mal_descriptions_cache()
                 return res
     except Exception:
         pass
@@ -609,13 +654,21 @@ def search_anime(query):
     return cards
 
 def resolve_title_to_anime(title):
-    cache_key = f"resolve_{title.lower()}"
+    clean_k = title.lower().strip()
+    cache_key = f"resolve_{clean_k}"
     if cache_key in CACHE:
         return CACHE[cache_key]["data"]
+    if clean_k in RESOLVE_CACHE:
+        res = RESOLVE_CACHE[clean_k]
+        CACHE[cache_key] = {"ts": time.time(), "data": res}
+        return res
+
     cards = search_anime(title)
     if cards:
         result = cards[0]
         CACHE[cache_key] = {"ts": time.time(), "data": result}
+        RESOLVE_CACHE[clean_k] = result
+        save_resolve_cache()
         return result
     return None
 
@@ -787,7 +840,7 @@ def get_mal_anime_status(title=None, mal_id=None, anime_id=None):
             raw = http_get(url, {"Authorization": f"Bearer {token}"})
             data = json.loads(raw)
             if "id" in data:
-                return {
+                res_obj = {
                     "mal_id": data.get("id"),
                     "title": data.get("title"),
                     "num_episodes": data.get("num_episodes", "?"),
@@ -795,6 +848,18 @@ def get_mal_anime_status(title=None, mal_id=None, anime_id=None):
                     "mean": data.get("mean"),
                     "my_list_status": data.get("my_list_status")
                 }
+                if data.get("synopsis"):
+                    MAL_DESCRIPTIONS_CACHE[f"mal_id_{data['id']}"] = {
+                        "synopsis": data.get("synopsis"),
+                        "score": str(data.get("mean") or "-")
+                    }
+                    if data.get("title"):
+                        MAL_DESCRIPTIONS_CACHE[clean_title(data["title"])] = {
+                            "synopsis": data.get("synopsis"),
+                            "score": str(data.get("mean") or "-")
+                        }
+                    save_mal_descriptions_cache()
+                return res_obj
         except Exception:
             pass
 
@@ -1110,13 +1175,31 @@ def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=3
 def get_favorites_list():
     if not os.path.exists(FAV_FILE):
         return []
+
+    # 1. Check persistent disk cache
+    now_ts = time.time()
+    if os.path.exists(FAV_LIST_CACHE_FILE):
+        try:
+            fav_mtime = os.path.getmtime(FAV_FILE)
+            cache_mtime = os.path.getmtime(FAV_LIST_CACHE_FILE)
+            if cache_mtime > fav_mtime and (now_ts - cache_mtime) < 600:
+                with open(FAV_LIST_CACHE_FILE, "r") as f:
+                    cached_results = json.load(f)
+                    if cached_results and isinstance(cached_results, list):
+                        return cached_results
+        except Exception:
+            pass
+
     fav_titles = []
     with open(FAV_FILE, "r") as f:
         fav_titles = [line.strip() for line in f if line.strip() and not line.startswith("#")]
-    
+
+    if not fav_titles:
+        return []
+
     favs, watching, completed, all_by_clean, all_by_id = get_user_status_sets()
-    results = []
-    for title in fav_titles:
+
+    def resolve_fav_item(title):
         card = resolve_title_to_anime(title)
         alts = [card.get("jp")] if card and card.get("jp") else []
         airing = get_anime_airing_info(title, alts)
@@ -1140,7 +1223,7 @@ def get_favorites_list():
                 c["time_until"] = tu if (tu is not None and isinstance(tu, (int, float))) else 888888888
             else:
                 c["time_until"] = 999999999
-            results.append(tag_card_status(c, favs, watching, completed, all_by_id))
+            return tag_card_status(c, favs, watching, completed, all_by_id)
         else:
             c = {
                 "id": "",
@@ -1164,7 +1247,10 @@ def get_favorites_list():
                 c["time_until"] = tu if (tu is not None and isinstance(tu, (int, float))) else 888888888
             else:
                 c["time_until"] = 999999999
-            results.append(c)
+            return c
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(resolve_fav_item, fav_titles))
 
     def sort_fav(item):
         val = item.get("time_until")
@@ -1175,6 +1261,14 @@ def get_favorites_list():
         return val
 
     results.sort(key=sort_fav)
+
+    # Save to disk cache
+    try:
+        with open(FAV_LIST_CACHE_FILE, "w") as f:
+            json.dump(results, f, indent=2)
+    except Exception:
+        pass
+
     return results
 
 def toggle_favorite(title):
@@ -1195,9 +1289,16 @@ def toggle_favorite(title):
         
     with open(FAV_FILE, "w") as fp:
         for item in favs:
-            fp.write(item + "\n")
-            
+            fp.write(f"{item}\n")
+
+    # Invalidate cached favorites list and user sets
+    if os.path.exists(FAV_LIST_CACHE_FILE):
+        try:
+            os.remove(FAV_LIST_CACHE_FILE)
+        except Exception:
+            pass
     CACHE.pop("user_sets", None)
+
     return is_now_fav
 
 def resolve_schedule_poster_and_id(item):
@@ -1400,13 +1501,83 @@ class RequestHandler(BaseHTTPRequestHandler):
         path = parsed.path
         params = urllib.parse.parse_qs(parsed.query)
 
-        if path == "/" or path.startswith("/watch"):
+        VALID_TABS = {"latest", "schedule", "favorites", "mal_watching", "mal_ptw", "history"}
+        clean_p = path.strip("/")
+        if path == "/" or path.startswith("/watch") or clean_p in VALID_TABS:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             html_path = Path(__file__).parent / "index.html"
             with open(html_path, "rb") as f:
                 self.wfile.write(f.read())
+            return
+
+        if path == "/api/thumb":
+            target_url = params.get("url", [""])[0]
+            if not target_url:
+                self.send_response(400)
+                self.end_headers()
+                return
+
+            url_hash = hashlib.sha256(target_url.encode("utf-8")).hexdigest()[:24]
+            parsed_url = urllib.parse.urlparse(target_url)
+            ext = os.path.splitext(parsed_url.path)[1].lower()
+            if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]:
+                ext = ".jpg"
+            cache_file = os.path.join(THUMB_CACHE_DIR, f"{url_hash}{ext}")
+
+            inm = self.headers.get("If-None-Match")
+            etag = f'"{url_hash}"'
+            if inm == etag and os.path.exists(cache_file):
+                self.send_response(304)
+                self.end_headers()
+                return
+
+            content_type = "image/jpeg"
+            if ext == ".png": content_type = "image/png"
+            elif ext == ".webp": content_type = "image/webp"
+            elif ext == ".gif": content_type = "image/gif"
+            elif ext == ".avif": content_type = "image/avif"
+
+            if os.path.exists(cache_file):
+                try:
+                    file_size = os.path.getsize(cache_file)
+                    self.send_response(200)
+                    self.send_header("Content-Type", content_type)
+                    self.send_header("Content-Length", str(file_size))
+                    self.send_header("Cache-Control", "public, max-age=2592000, immutable")
+                    self.send_header("ETag", etag)
+                    self.end_headers()
+                    with open(cache_file, "rb") as f:
+                        shutil.copyfileobj(f, self.wfile, 65536)
+                    return
+                except Exception:
+                    pass
+
+            try:
+                req = urllib.request.Request(
+                    target_url,
+                    headers={"User-Agent": USER_AGENT, "Referer": BASE_URL}
+                )
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = resp.read()
+                    ct = resp.headers.get("Content-Type", content_type)
+                    try:
+                        with open(cache_file, "wb") as f:
+                            f.write(data)
+                    except Exception:
+                        pass
+                    self.send_response(200)
+                    self.send_header("Content-Type", ct)
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "public, max-age=2592000, immutable")
+                    self.send_header("ETag", etag)
+                    self.end_headers()
+                    self.wfile.write(data)
+            except Exception:
+                self.send_response(302)
+                self.send_header("Location", target_url)
+                self.end_headers()
             return
 
         if path == "/api/m3u8":
