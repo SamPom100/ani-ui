@@ -2200,6 +2200,16 @@
       }
     }
 
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     function setCount(text) {
       const el = document.getElementById('sectionCount');
       if (el) el.innerText = text;
@@ -3275,6 +3285,19 @@
     }
 
     /* STREAM LOADER */
+    function formatTime(sec) {
+      const s = Math.floor(sec || 0);
+      const m = Math.floor(s / 60);
+      const h = Math.floor(m / 60);
+      const remM = m % 60;
+      const remS = s % 60;
+      const pad = n => String(n).padStart(2, '0');
+      if (h > 0) {
+        return `${h}:${pad(remM)}:${pad(remS)}`;
+      }
+      return `${remM}:${pad(remS)}`;
+    }
+
     async function loadAndStreamEpisode(epNum) {
       if (!currentAnime || !currentAnime.id) return;
       
@@ -3291,13 +3314,31 @@
           video.onvolumechange = onVideoVolumeChange;
           updateVolumeUI();
 
+          // Resume saved playback position
+          const progressKey = `ani_ui_pos_${currentAnime.id}_${epNum}`;
+          const savedTime = parseFloat(localStorage.getItem(progressKey) || '0');
+          const hasSavedPos = savedTime && savedTime > 3;
+
+          let lastSavedSec = 0;
+          video.ontimeupdate = () => {
+            const cur = Math.floor(video.currentTime || 0);
+            if (cur > 0 && Math.abs(cur - lastSavedSec) >= 2) {
+              lastSavedSec = cur;
+              if (video.duration && (video.duration - video.currentTime < 15 || video.currentTime / video.duration > 0.95)) {
+                localStorage.removeItem(progressKey);
+              } else {
+                localStorage.setItem(progressKey, video.currentTime.toFixed(1));
+              }
+            }
+          };
+
           // Subtitles
           if (res.subtitles && res.subtitles.length > 0) {
             let defIdx = -1;
             res.subtitles.forEach((s, idx) => {
               const track = document.createElement('track');
               track.kind = 'subtitles';
-              track.label = s.lang || s.label || `Subtitle ${idx+1}`;
+              track.label = s.label || s.lang || `Subtitle ${idx+1}`;
               track.srclang = s.lang ? s.lang.toLowerCase() : 'en';
               track.src = s.src;
               if (s.default) defIdx = idx;
@@ -3318,6 +3359,7 @@
             hlsInstance = new Hls({
               enableWorker: true,
               lowLatencyMode: false,
+              startPosition: hasSavedPos ? savedTime : -1,
               backBufferLength: 90,
               maxBufferLength: 30,
               maxMaxBufferLength: 60,
@@ -3329,6 +3371,10 @@
             hlsInstance.attachMedia(video);
             hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
               setupQualityLevels();
+              if (hasSavedPos) {
+                video.currentTime = savedTime;
+                showToast(`Resumed Episode ${epNum} at ${formatTime(savedTime)}`, false);
+              }
               if (autoPlay) video.play().catch(() => {});
             });
             hlsInstance.on(Hls.Events.LEVEL_SWITCHED, () => {
@@ -3355,19 +3401,26 @@
           } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = res.stream_proxy;
             video.addEventListener('loadedmetadata', () => {
+              if (hasSavedPos) {
+                video.currentTime = savedTime;
+                showToast(`Resumed Episode ${epNum} at ${formatTime(savedTime)}`, false);
+              }
               if (autoPlay) video.play().catch(() => {});
-            });
+            }, { once: true });
           }
 
           // Auto-next on video end
           video.onended = () => {
+            localStorage.removeItem(progressKey);
             if (autoNext) {
               showToast('Auto Next: Playing next episode...', false);
               nextEpisode();
             }
           };
 
-          showToast(`Now playing Episode ${epNum}!`, false);
+          if (!hasSavedPos) {
+            showToast(`Now playing Episode ${epNum}!`, false);
+          }
         } else {
           showToast(`Stream error: ${res.message || 'Stream unavailable'}`, false);
         }
@@ -3381,6 +3434,7 @@
       const video = document.getElementById('playerVideo');
       if (video) {
         video.pause();
+        video.ontimeupdate = null;
         video.removeAttribute('src');
         video.innerHTML = '';
         video.load();
