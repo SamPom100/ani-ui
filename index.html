@@ -2477,6 +2477,9 @@
         if (data.status === 'ok') {
           renderGrid(data.results);
           setCount(`${data.results.length} recently updated`);
+        } else {
+          view.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle" style="font-size:24px;color:#ef4444;margin-bottom:8px;"></i><br>Failed to load latest episodes: ${data.message || 'Server error'}</div>`;
+          setCount('Failed to load');
         }
       } else if (tabName === 'schedule') {
         titleEl.innerHTML = '<i class="fas fa-calendar-alt"></i><span>Estimated Schedule</span>';
@@ -2490,6 +2493,9 @@
         if (data.status === 'ok') {
           renderGrid(data.results);
           setCount(`${data.results.length} favorites saved`);
+        } else {
+          view.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle" style="font-size:24px;color:#ef4444;margin-bottom:8px;"></i><br>Failed to load favorites: ${data.message || 'Server error'}</div>`;
+          setCount('Failed to load');
         }
       } else if (tabName === 'mal_watching') {
         titleEl.innerHTML = '<i class="fas fa-play-circle" style="color:#06b6d4;"></i><span>MyAnimeList: Currently Watching</span>';
@@ -2499,6 +2505,9 @@
         if (data.status === 'ok') {
           renderGrid(data.results);
           setCount(`${data.results.length} anime watching`);
+        } else {
+          view.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle" style="font-size:24px;color:#ef4444;margin-bottom:8px;"></i><br>Failed to load MAL Watching: ${data.message || 'Server error'}</div>`;
+          setCount('Failed to load');
         }
       } else if (tabName === 'mal_ptw') {
         titleEl.innerHTML = '<i class="fas fa-bookmark" style="color:#a855f7;"></i><span>MyAnimeList: Plan to Watch</span>';
@@ -2508,6 +2517,9 @@
         if (data.status === 'ok') {
           renderGrid(data.results);
           setCount(`${data.results.length} anime planned`);
+        } else {
+          view.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle" style="font-size:24px;color:#ef4444;margin-bottom:8px;"></i><br>Failed to load Plan to Watch: ${data.message || 'Server error'}</div>`;
+          setCount('Failed to load');
         }
       } else if (tabName === 'history') {
         titleEl.innerHTML = '<i class="fas fa-history" style="color:#10b981;"></i><span>ani-cli Watch History</span>';
@@ -2517,6 +2529,9 @@
         if (data.status === 'ok') {
           renderGrid(data.results);
           setCount(`${data.results.length} watch sessions`);
+        } else {
+          view.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle" style="font-size:24px;color:#ef4444;margin-bottom:8px;"></i><br>Failed to load history: ${data.message || 'Server error'}</div>`;
+          setCount('Failed to load');
         }
       }
     }

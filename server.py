@@ -173,7 +173,7 @@ def get_anime_airing_info(title, alt_titles=None):
         entry = AIRING_CACHE[c_title]
         if now_ts - entry.get("updated_at", 0) < 1800:
             airing_at = entry.get("airing_at")
-            diff = int(airing_at - now_ts) if airing_at else (999999999 if entry.get("status") == "FINISHED" else None)
+            diff = int(airing_at - now_ts) if airing_at else (999999999 if entry.get("status") == "FINISHED" else 888888888)
             return {
                 **entry,
                 "time_until": diff,
@@ -202,7 +202,7 @@ def get_anime_airing_info(title, alt_titles=None):
                 airing_at = v.get("airing_at")
                 updated_at = v.get("updated_at", 0)
                 if (airing_at and airing_at > now_ts) or v.get("status") == "FINISHED":
-                    diff = int(airing_at - now_ts) if airing_at else (999999999 if v.get("status") == "FINISHED" else None)
+                    diff = int(airing_at - now_ts) if airing_at else (999999999 if v.get("status") == "FINISHED" else 888888888)
                     res = {
                         "next_ep": v.get("next_ep"),
                         "airing_at": airing_at,
@@ -1136,7 +1136,8 @@ def get_favorites_list():
                 c["airing_at"] = airing.get("airing_at")
                 c["countdown"] = airing.get("countdown")
                 c["airing_status"] = airing.get("status")
-                c["time_until"] = airing.get("time_until", 999999999)
+                tu = airing.get("time_until")
+                c["time_until"] = tu if (tu is not None and isinstance(tu, (int, float))) else 888888888
             else:
                 c["time_until"] = 999999999
             results.append(tag_card_status(c, favs, watching, completed, all_by_id))
@@ -1159,12 +1160,21 @@ def get_favorites_list():
                 c["airing_at"] = airing.get("airing_at")
                 c["countdown"] = airing.get("countdown")
                 c["airing_status"] = airing.get("status")
-                c["time_until"] = airing.get("time_until", 999999999)
+                tu = airing.get("time_until")
+                c["time_until"] = tu if (tu is not None and isinstance(tu, (int, float))) else 888888888
             else:
                 c["time_until"] = 999999999
             results.append(c)
 
-    results.sort(key=lambda x: x.get("time_until", 999999999))
+    def sort_fav(item):
+        val = item.get("time_until")
+        if val is None or not isinstance(val, (int, float)):
+            return 888888888
+        if val <= 0:
+            return 0
+        return val
+
+    results.sort(key=sort_fav)
     return results
 
 def toggle_favorite(title):
