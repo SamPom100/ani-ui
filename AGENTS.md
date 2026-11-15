@@ -141,7 +141,7 @@ HiAnime anime IDs (e.g., `gushing-over-magical-girls-1-9557`) do not match MyAni
   2. `favorites_cache.json` persisted to disk for cross-tool synchronization.
   3. Live AniList GraphQL queries only on cache miss.
 * **Client-Side Live Interval:** The frontend runs a `setInterval(..., 1000)` ticker that decrements active countdown timestamps each second and updates card badges and watch page banners in the DOM without issuing network requests. Badges highlight shows airing within 24 hours with an animated gold pulse dot.
-* **Auto-Sorting:** The Favorites view automatically sorts titles by soonest airing episode first, followed by shows without scheduled air dates, and finished series last.
+* **Auto-Sorting:** The Favorites view automatically sorts titles by soonest airing episode first, followed by shows without scheduled air dates, and finished series last. When a releasing anime has no published upcoming episode date (`airing_at` is null), `time_until` must fall back to an integer sentinel (e.g. `888888888`), never `None`, to avoid Python `TypeError: '<' not supported between instances of 'NoneType' and 'int'`.
 
 ### Invariant 6: MAL-Map Canonical Hash Links
 * Links to the external franchise visualizer at `https://sampom100.github.io/MAL-Map/` must use hash navigation: `#show=<canonical_title>`.
