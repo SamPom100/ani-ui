@@ -837,6 +837,25 @@
       left: 0;
     }
 
+    .art-video-player .art-settings {
+      min-width: 270px !important;
+      transition: width 0.18s ease, height 0.18s ease !important;
+      border-radius: 8px !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    .art-video-player .art-settings .art-setting-panel .art-setting-item.art-setting-slider-item {
+      height: auto !important;
+      min-height: 80px !important;
+      overflow: visible !important;
+      padding: 12px 16px !important;
+      cursor: default !important;
+    }
+
+    .art-video-player .art-settings .art-setting-panel .art-setting-item.art-setting-slider-item:hover {
+      background-color: transparent !important;
+    }
+
     .player-frame video {
       width: 100%;
       height: 100%;
@@ -3418,68 +3437,55 @@
               }
             });
 
-            const sizePresets = [
-              { val: 70, html: '70% (Very Small)' },
-              { val: 85, html: '85% (Small)' },
-              { val: 100, html: '100% (Default)' },
-              { val: 115, html: '115% (Medium Large)' },
-              { val: 130, html: '130% (Large)' },
-              { val: 150, html: '150% (Very Large)' },
-              { val: 175, html: '175% (Huge)' },
-              { val: 200, html: '200% (Maximum)' }
-            ];
-            const sizeOptions = sizePresets.map(p => ({
-              default: Math.abs(captionSize - p.val) < 8,
-              html: p.html,
-              value: p.val
-            }));
-
             playerSettings.push({
               icon: '<i class="fas fa-text-height"></i>',
               html: 'Caption Size',
               name: 'art-caption-size',
-              width: 250,
+              width: 280,
               tooltip: `${captionSize}%`,
-              selector: sizeOptions,
-              onSelect: function(item) {
-                applyCaptionSize(item.value);
-                const artSlider = document.getElementById('artCaptionSliderInput');
-                if (artSlider) artSlider.value = item.value;
-                const artVal = document.getElementById('artCaptionSliderVal');
-                if (artVal) artVal.innerText = `${item.value}%`;
-                return `${item.value}%`;
-              },
-              mounted: function($panel) {
-                if ($panel && !$panel.querySelector('.art-cc-slider-wrap')) {
-                  const sliderWrap = document.createElement('div');
-                  sliderWrap.className = 'art-cc-slider-wrap';
-                  sliderWrap.style.cssText = 'padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.3);';
-                  sliderWrap.innerHTML = `
-                    <span style="font-size: 11px; color: #888; font-weight: 700;">A</span>
-                    <input type="range" class="pc-vol-slider" id="artCaptionSliderInput" min="60" max="220" step="5" value="${captionSize}" style="flex: 1; accent-color: #FFBADE; cursor: pointer; height: 5px;" title="Adjust Caption Size">
-                    <span style="font-size: 16px; color: #ccc; font-weight: 700;">A</span>
-                    <span id="artCaptionSliderVal" style="font-size: 12px; color: #FFBADE; font-weight: 700; min-width: 40px; text-align: right;">${captionSize}%</span>
-                  `;
-                  ['click', 'mousedown', 'pointerdown', 'touchstart'].forEach(evt => {
-                    sliderWrap.addEventListener(evt, e => e.stopPropagation());
-                  });
-                  const input = sliderWrap.querySelector('#artCaptionSliderInput');
-                  const valTxt = sliderWrap.querySelector('#artCaptionSliderVal');
-                  input.addEventListener('input', (e) => {
-                    e.stopPropagation();
-                    const val = input.value;
-                    if (valTxt) valTxt.innerText = `${val}%`;
-                    handleCaptionSizeInput(val);
-                    const parentTooltip = document.querySelector('.art-setting-item[data-name="art-caption-size"] .art-setting-item-right-tooltip');
-                    if (parentTooltip) parentTooltip.innerText = `${val}%`;
-                  });
-                  if ($panel.children.length > 1) {
-                    $panel.insertBefore(sliderWrap, $panel.children[1]);
-                  } else {
-                    $panel.appendChild(sliderWrap);
+              selector: [
+                {
+                  html: `
+                    <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; cursor: default;" onclick="event.stopPropagation()">
+                      <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;">Font Size</span>
+                        <span id="artCaptionSliderVal" style="font-size: 13.5px; color: #FFBADE; font-weight: 700;">${captionSize}%</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 11px; color: #888; font-weight: 700; line-height: 1;">A</span>
+                        <input type="range" class="pc-vol-slider" id="artCaptionSliderInput" min="60" max="220" step="5" value="${captionSize}" style="flex: 1; accent-color: #FFBADE; cursor: pointer; height: 6px; border-radius: 3px;" title="Adjust Caption Size">
+                        <span style="font-size: 17px; color: #fff; font-weight: 700; line-height: 1;">A</span>
+                      </div>
+                    </div>
+                  `,
+                  mounted: function($item) {
+                    $item.className = 'art-setting-item art-setting-slider-item';
+                    $item.style.height = '88px';
+                    $item.style.overflow = 'visible';
+                    const parentSettings = $item.closest('.art-settings');
+                    if (parentSettings) {
+                      parentSettings.style.height = '145px';
+                      parentSettings.style.width = '280px';
+                    }
+                    const slider = $item.querySelector('#artCaptionSliderInput');
+                    const valTxt = $item.querySelector('#artCaptionSliderVal');
+                    if (slider) {
+                      ['click', 'mousedown', 'pointerdown', 'touchstart'].forEach(evt => {
+                        slider.addEventListener(evt, e => e.stopPropagation());
+                        $item.addEventListener(evt, e => e.stopPropagation());
+                      });
+                      slider.addEventListener('input', (e) => {
+                        e.stopPropagation();
+                        const val = slider.value;
+                        if (valTxt) valTxt.innerText = `${val}%`;
+                        handleCaptionSizeInput(val);
+                        const parentTooltip = document.querySelector('.art-setting-item[data-name="art-caption-size"] .art-setting-item-right-tooltip');
+                        if (parentTooltip) parentTooltip.innerText = `${val}%`;
+                      });
+                    }
                   }
                 }
-              }
+              ]
             });
           }
 

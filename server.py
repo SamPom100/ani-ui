@@ -18,7 +18,7 @@ import urllib.error
 import subprocess
 import threading
 import concurrent.futures
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 PORT = 5050
@@ -1723,7 +1723,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 def main():
     print(f"Starting ani-ui server on http://localhost:{PORT}")
-    server = HTTPServer(("0.0.0.0", PORT), RequestHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), RequestHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
