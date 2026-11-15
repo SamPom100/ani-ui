@@ -10,6 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/artplayer@5.1.7/dist/artplayer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-hls-control/dist/artplayer-plugin-hls-control.js"></script>
 
   <style>
     :root {
@@ -824,6 +826,15 @@
       width: 100%;
       aspect-ratio: 16 / 9;
       background: #000;
+      overflow: hidden;
+    }
+
+    .player-frame #artplayerContainer {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
     }
 
     .player-frame video {
@@ -842,7 +853,7 @@
       align-items: center;
       justify-content: center;
       gap: 12px;
-      z-index: 10;
+      z-index: 100;
       color: #fff;
       font-weight: 600;
       font-size: 14px;
@@ -1940,7 +1951,7 @@
         <!-- LEFT: VIDEO PLAYER + CONTROLS + SERVERS -->
         <div class="watch-player-col">
           <div class="player-frame">
-            <video id="playerVideo" controls playsinline></video>
+            <div id="artplayerContainer" style="width: 100%; height: 100%;"></div>
             <div id="playerLoading" class="player-loading-overlay" style="display: none;">
               <div class="spinner"></div>
               <span>Resolving stream from ani-cli / ZokoAnime...</span>
@@ -2180,6 +2191,8 @@
     let currentMode = "sub";
     let allEpisodes = [];
     let hlsInstance = null;
+    let artInstance = null;
+    let currentSubtitles = [];
     let autoPlay = true;
     let autoNext = true;
     let captionsEnabled = localStorage.getItem('ani_ui_captions') !== 'false';
@@ -2246,19 +2259,58 @@
         slider.value = captionSize;
       }
 
+      const basePx = Math.round(22 * (captionSize / 100));
+      const container = document.getElementById('artplayerContainer');
+      if (container) {
+        container.style.setProperty('--art-subtitle-font-size', `${basePx}px`);
+      }
+
+      const artSlider = document.getElementById('artCaptionSliderInput');
+      if (artSlider && parseInt(artSlider.value, 10) !== captionSize) {
+        artSlider.value = captionSize;
+      }
+      const artTooltip = document.querySelector('.art-setting-item[data-name="art-caption-size"] .art-setting-item-right-tooltip');
+      if (artTooltip) {
+        artTooltip.innerText = `${captionSize}%`;
+      }
+
+      if (artInstance && artInstance.subtitle) {
+        artInstance.subtitle.style({
+          fontSize: `${basePx}px`,
+          backgroundColor: 'transparent'
+        });
+      }
+
       let styleEl = document.getElementById('captionCustomStyle');
       if (!styleEl) {
         styleEl = document.createElement('style');
         styleEl.id = 'captionCustomStyle';
         document.head.appendChild(styleEl);
       }
-      const basePx = Math.round(20 * (captionSize / 100));
       styleEl.textContent = `
         ::cue, video::cue {
           font-size: max(${basePx}px, calc(1.85vw * ${captionSize / 100})) !important;
           line-height: 1.35 !important;
           background-color: rgba(0, 0, 0, 0.75) !important;
           text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 5px rgba(0,0,0,0.9) !important;
+        }
+        .art-video-player .art-subtitle {
+          font-size: ${basePx}px !important;
+          background: transparent !important;
+          background-color: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+        }
+        .art-video-player .art-subtitle .art-subtitle-line {
+          background-color: rgba(0, 0, 0, 0.72) !important;
+          display: inline-block !important;
+          padding: 2px 10px !important;
+          border-radius: 4px !important;
+          margin: 2px auto !important;
+          text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 4px rgba(0,0,0,0.9) !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.3px !important;
         }
       `;
     }
@@ -2268,7 +2320,6 @@
     }
 
     function applyCaptionsState() {
-      const video = document.getElementById('playerVideo');
       const ccBtn = document.getElementById('btnToggleCC');
       const ccText = document.getElementById('ccText');
 
@@ -2276,8 +2327,8 @@
       if (ccText) {
         if (!captionsEnabled) {
           ccText.innerText = 'CC: OFF';
-        } else if (video && video.textTracks && selectedSubtitleTrack >= 0 && video.textTracks[selectedSubtitleTrack]) {
-          const l = video.textTracks[selectedSubtitleTrack].label || 'ON';
+        } else if (currentSubtitles && selectedSubtitleTrack >= 0 && currentSubtitles[selectedSubtitleTrack]) {
+          const l = currentSubtitles[selectedSubtitleTrack].label || currentSubtitles[selectedSubtitleTrack].lang || 'ON';
           ccText.innerText = `CC: ${l.split(' ')[0]}`;
         } else {
           ccText.innerText = 'CC: ON';
@@ -2286,22 +2337,18 @@
 
       applyCaptionSize(captionSize);
 
-      if (!video || !video.textTracks) return;
-
-      for (let i = 0; i < video.textTracks.length; i++) {
-        const track = video.textTracks[i];
+      if (artInstance && artInstance.subtitle) {
         if (captionsEnabled) {
-          if (selectedSubtitleTrack === i) {
-            track.mode = 'showing';
-          } else if (selectedSubtitleTrack === -1 && i === 0) {
-            track.mode = 'showing';
-          } else {
-            track.mode = 'hidden';
+          const track = (currentSubtitles && currentSubtitles[selectedSubtitleTrack]) || (currentSubtitles && currentSubtitles[0]);
+          if (track) {
+            artInstance.subtitle.switch(track.src, { name: track.label || track.lang || 'Subtitle' });
+            artInstance.subtitle.show = true;
           }
         } else {
-          track.mode = 'hidden';
+          artInstance.subtitle.show = false;
         }
       }
+
       renderCCMenu();
     }
 
@@ -2332,11 +2379,9 @@
     function renderCCMenu() {
       const menu = document.getElementById('ccMenu');
       if (!menu) return;
-      const video = document.getElementById('playerVideo');
-      const tracks = video ? Array.from(video.textTracks || []) : [];
 
       let tracksHtml = '';
-      if (tracks.length === 0) {
+      if (!currentSubtitles || currentSubtitles.length === 0) {
         tracksHtml = `
           <div class="pc-dropdown-header">Subtitles</div>
           <div class="pc-dropdown-item ${!captionsEnabled ? 'active' : ''}" onclick="selectSubtitleTrack(-1, false)">
@@ -2354,9 +2399,9 @@
             ${isOff ? '<i class="fas fa-check"></i>' : ''}
           </div>
         `;
-        tracks.forEach((track, idx) => {
+        currentSubtitles.forEach((track, idx) => {
           const isActive = captionsEnabled && (selectedSubtitleTrack === idx || (selectedSubtitleTrack === -1 && (track.default || idx === 0)));
-          const label = track.label || track.language || `Track ${idx + 1}`;
+          const label = track.label || track.lang || `Track ${idx + 1}`;
           tracksHtml += `
             <div class="pc-dropdown-item ${isActive ? 'active' : ''}" onclick="selectSubtitleTrack(${idx}, true)">
               <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 175px;">${escapeHtml(label)}</span>
@@ -2496,7 +2541,6 @@
 
     /* VOLUME CONTROLS */
     function updateVolumeUI() {
-      const video = document.getElementById('playerVideo');
       const volIcon = document.getElementById('volIcon');
       const volText = document.getElementById('volText');
       const volSlider = document.getElementById('volSlider');
@@ -2504,9 +2548,9 @@
 
       const effectiveVol = isMuted ? 0 : currentVolume;
 
-      if (video) {
-        video.volume = currentVolume;
-        video.muted = isMuted;
+      if (artInstance) {
+        artInstance.volume = currentVolume;
+        artInstance.muted = isMuted;
       }
 
       if (volSlider) {
@@ -2556,11 +2600,10 @@
     }
 
     function onVideoVolumeChange() {
-      const video = document.getElementById('playerVideo');
-      if (!video) return;
-      if (Math.abs(video.volume - currentVolume) > 0.01 || video.muted !== isMuted) {
-        currentVolume = video.volume;
-        isMuted = video.muted;
+      if (!artInstance) return;
+      if (Math.abs(artInstance.volume - currentVolume) > 0.01 || artInstance.muted !== isMuted) {
+        currentVolume = artInstance.volume;
+        isMuted = artInstance.muted;
         localStorage.setItem('ani_ui_volume', currentVolume.toString());
         localStorage.setItem('ani_ui_muted', isMuted ? 'true' : 'false');
         updateVolumeUI();
@@ -3301,7 +3344,6 @@
     async function loadAndStreamEpisode(epNum) {
       if (!currentAnime || !currentAnime.id) return;
       
-      const video = document.getElementById('playerVideo');
       const loading = document.getElementById('playerLoading');
       loading.style.display = 'flex';
 
@@ -3311,112 +3353,292 @@
 
         if (res.status === 'ok' && res.stream_proxy) {
           stopVideoPlayer();
-          video.onvolumechange = onVideoVolumeChange;
-          updateVolumeUI();
+
+          currentSubtitles = res.subtitles || [];
 
           // Resume saved playback position
           const progressKey = `ani_ui_pos_${currentAnime.id}_${epNum}`;
           const savedTime = parseFloat(localStorage.getItem(progressKey) || '0');
           const hasSavedPos = savedTime && savedTime > 3;
 
-          let lastSavedSec = 0;
-          video.ontimeupdate = () => {
-            const cur = Math.floor(video.currentTime || 0);
-            if (cur > 0 && Math.abs(cur - lastSavedSec) >= 2) {
-              lastSavedSec = cur;
-              if (video.duration && (video.duration - video.currentTime < 15 || video.currentTime / video.duration > 0.95)) {
-                localStorage.removeItem(progressKey);
-              } else {
-                localStorage.setItem(progressKey, video.currentTime.toFixed(1));
-              }
-            }
-          };
-
-          // Subtitles
-          if (res.subtitles && res.subtitles.length > 0) {
+          // Default subtitle track
+          if (currentSubtitles.length > 0) {
             let defIdx = -1;
-            res.subtitles.forEach((s, idx) => {
-              const track = document.createElement('track');
-              track.kind = 'subtitles';
-              track.label = s.label || s.lang || `Subtitle ${idx+1}`;
-              track.srclang = s.lang ? s.lang.toLowerCase() : 'en';
-              track.src = s.src;
+            currentSubtitles.forEach((s, idx) => {
               if (s.default) defIdx = idx;
-              video.appendChild(track);
             });
-            if (selectedSubtitleTrack === -1 || selectedSubtitleTrack >= res.subtitles.length) {
+            if (selectedSubtitleTrack === -1 || selectedSubtitleTrack >= currentSubtitles.length) {
               selectedSubtitleTrack = defIdx !== -1 ? defIdx : 0;
             }
-            video.addEventListener('loadedmetadata', applyCaptionsState, { once: true });
-            setTimeout(applyCaptionsState, 250);
-            setTimeout(applyCaptionsState, 750);
           } else {
             selectedSubtitleTrack = -1;
-            setTimeout(applyCaptionsState, 100);
           }
 
-          if (Hls.isSupported()) {
-            hlsInstance = new Hls({
-              enableWorker: true,
-              lowLatencyMode: false,
-              startPosition: hasSavedPos ? savedTime : -1,
-              backBufferLength: 90,
-              maxBufferLength: 30,
-              maxMaxBufferLength: 60,
-              fragLoadingTimeOut: 25000,
-              manifestLoadingTimeOut: 20000,
-              fragLoadingMaxRetry: 4
-            });
-            hlsInstance.loadSource(res.stream_proxy);
-            hlsInstance.attachMedia(video);
-            hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-              setupQualityLevels();
-              if (hasSavedPos) {
-                video.currentTime = savedTime;
-                showToast(`Resumed Episode ${epNum} at ${formatTime(savedTime)}`, false);
+          // Build Artplayer in-player settings items
+          const playerSettings = [];
+
+          if (currentSubtitles.length > 0) {
+            const subOptions = [
+              {
+                default: !captionsEnabled,
+                html: 'Off',
+                value: -1
               }
-              if (autoPlay) video.play().catch(() => {});
+            ];
+            currentSubtitles.forEach((s, idx) => {
+              const label = s.label || s.lang || `Subtitle ${idx + 1}`;
+              subOptions.push({
+                default: captionsEnabled && (selectedSubtitleTrack === idx || (selectedSubtitleTrack === -1 && (s.default || idx === 0))),
+                html: escapeHtml(label),
+                value: idx
+              });
             });
-            hlsInstance.on(Hls.Events.LEVEL_SWITCHED, () => {
-              if (currentQualityLevel === -1) {
-                renderQualityMenu();
-              }
-            });
-            hlsInstance.on(Hls.Events.ERROR, (event, data) => {
-              if (data.fatal) {
-                switch (data.type) {
-                  case Hls.ErrorTypes.NETWORK_ERROR:
-                    hlsInstance.startLoad();
-                    break;
-                  case Hls.ErrorTypes.MEDIA_ERROR:
-                    hlsInstance.recoverMediaError();
-                    break;
-                  default:
-                    showToast(`Player error: ${data.details}`, false);
-                    hlsInstance.destroy();
-                    break;
+
+            let activeSubLabel = 'Off';
+            if (captionsEnabled) {
+              const activeTrack = currentSubtitles[selectedSubtitleTrack] || currentSubtitles[0];
+              activeSubLabel = activeTrack ? (activeTrack.label || activeTrack.lang || 'ON') : 'ON';
+            }
+
+            playerSettings.push({
+              icon: '<i class="fas fa-closed-captioning"></i>',
+              html: 'Subtitles',
+              name: 'art-subtitles',
+              width: 220,
+              tooltip: activeSubLabel,
+              selector: subOptions,
+              onSelect: function(item) {
+                if (item.value === -1) {
+                  selectSubtitleTrack(-1, false);
+                  return 'Off';
+                } else {
+                  selectSubtitleTrack(item.value, true);
+                  return item.html;
                 }
               }
             });
-          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = res.stream_proxy;
-            video.addEventListener('loadedmetadata', () => {
-              if (hasSavedPos) {
-                video.currentTime = savedTime;
-                showToast(`Resumed Episode ${epNum} at ${formatTime(savedTime)}`, false);
+
+            const sizePresets = [
+              { val: 70, html: '70% (Very Small)' },
+              { val: 85, html: '85% (Small)' },
+              { val: 100, html: '100% (Default)' },
+              { val: 115, html: '115% (Medium Large)' },
+              { val: 130, html: '130% (Large)' },
+              { val: 150, html: '150% (Very Large)' },
+              { val: 175, html: '175% (Huge)' },
+              { val: 200, html: '200% (Maximum)' }
+            ];
+            const sizeOptions = sizePresets.map(p => ({
+              default: Math.abs(captionSize - p.val) < 8,
+              html: p.html,
+              value: p.val
+            }));
+
+            playerSettings.push({
+              icon: '<i class="fas fa-text-height"></i>',
+              html: 'Caption Size',
+              name: 'art-caption-size',
+              width: 250,
+              tooltip: `${captionSize}%`,
+              selector: sizeOptions,
+              onSelect: function(item) {
+                applyCaptionSize(item.value);
+                const artSlider = document.getElementById('artCaptionSliderInput');
+                if (artSlider) artSlider.value = item.value;
+                const artVal = document.getElementById('artCaptionSliderVal');
+                if (artVal) artVal.innerText = `${item.value}%`;
+                return `${item.value}%`;
+              },
+              mounted: function($panel) {
+                if ($panel && !$panel.querySelector('.art-cc-slider-wrap')) {
+                  const sliderWrap = document.createElement('div');
+                  sliderWrap.className = 'art-cc-slider-wrap';
+                  sliderWrap.style.cssText = 'padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.3);';
+                  sliderWrap.innerHTML = `
+                    <span style="font-size: 11px; color: #888; font-weight: 700;">A</span>
+                    <input type="range" class="pc-vol-slider" id="artCaptionSliderInput" min="60" max="220" step="5" value="${captionSize}" style="flex: 1; accent-color: #FFBADE; cursor: pointer; height: 5px;" title="Adjust Caption Size">
+                    <span style="font-size: 16px; color: #ccc; font-weight: 700;">A</span>
+                    <span id="artCaptionSliderVal" style="font-size: 12px; color: #FFBADE; font-weight: 700; min-width: 40px; text-align: right;">${captionSize}%</span>
+                  `;
+                  ['click', 'mousedown', 'pointerdown', 'touchstart'].forEach(evt => {
+                    sliderWrap.addEventListener(evt, e => e.stopPropagation());
+                  });
+                  const input = sliderWrap.querySelector('#artCaptionSliderInput');
+                  const valTxt = sliderWrap.querySelector('#artCaptionSliderVal');
+                  input.addEventListener('input', (e) => {
+                    e.stopPropagation();
+                    const val = input.value;
+                    if (valTxt) valTxt.innerText = `${val}%`;
+                    handleCaptionSizeInput(val);
+                    const parentTooltip = document.querySelector('.art-setting-item[data-name="art-caption-size"] .art-setting-item-right-tooltip');
+                    if (parentTooltip) parentTooltip.innerText = `${val}%`;
+                  });
+                  if ($panel.children.length > 1) {
+                    $panel.insertBefore(sliderWrap, $panel.children[1]);
+                  } else {
+                    $panel.appendChild(sliderWrap);
+                  }
+                }
               }
-              if (autoPlay) video.play().catch(() => {});
-            }, { once: true });
+            });
           }
 
-          // Auto-next on video end
-          video.onended = () => {
+          const activeSub = (captionsEnabled && currentSubtitles.length > 0)
+            ? (currentSubtitles[selectedSubtitleTrack] || currentSubtitles[0])
+            : null;
+
+          artInstance = new Artplayer({
+            container: '#artplayerContainer',
+            url: res.stream_proxy,
+            type: 'm3u8',
+            autoplay: autoPlay,
+            autoSize: false,
+            autoMini: false,
+            playbackRate: true,
+            aspectRatio: true,
+            setting: true,
+            hotkey: true,
+            pip: true,
+            fullscreen: true,
+            fullscreenWeb: true,
+            mutex: true,
+            theme: '#FFBADE',
+            volume: currentVolume,
+            isLive: false,
+            muted: isMuted,
+            subtitle: (activeSub && captionsEnabled) ? {
+              url: activeSub.src,
+              type: 'vtt',
+              style: {
+                fontSize: `${Math.round(22 * (captionSize / 100))}px`,
+                color: '#fff',
+                backgroundColor: 'transparent',
+                padding: '0',
+                border: 'none'
+              },
+              encoding: 'utf-8'
+            } : {},
+            settings: playerSettings,
+            plugins: [
+              artplayerPluginHlsControl({
+                quality: {
+                  control: true,
+                  setting: true,
+                  getName: (l) => `${l.height}p`,
+                  title: 'Quality',
+                  auto: 'Auto'
+                }
+              })
+            ],
+            customType: {
+              m3u8: function(video, url, art) {
+                if (Hls.isSupported()) {
+                  if (art.hls) art.hls.destroy();
+                  const hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: false,
+                    startPosition: hasSavedPos ? savedTime : -1,
+                    backBufferLength: 90,
+                    maxBufferLength: 30,
+                    maxMaxBufferLength: 60,
+                    fragLoadingTimeOut: 25000,
+                    manifestLoadingTimeOut: 20000,
+                    fragLoadingMaxRetry: 4
+                  });
+                  hls.loadSource(url);
+                  hls.attachMedia(video);
+                  art.hls = hls;
+                  hlsInstance = hls;
+
+                  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    setupQualityLevels();
+                    if (art.plugins && art.plugins.artplayerPluginHlsControl) {
+                      try {
+                        art.plugins.artplayerPluginHlsControl.update();
+                      } catch (err) {}
+                    }
+                    if (hasSavedPos) {
+                      video.currentTime = savedTime;
+                      showToast(`Resumed Episode ${epNum} at ${formatTime(savedTime)}`, false);
+                    }
+                    if (autoPlay) art.play().catch(() => {});
+                  });
+
+                  hls.on(Hls.Events.LEVEL_SWITCHED, () => {
+                    if (currentQualityLevel === -1) {
+                      renderQualityMenu();
+                    }
+                  });
+
+                  hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                      switch (data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                          hls.startLoad();
+                          break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                          hls.recoverMediaError();
+                          break;
+                        default:
+                          showToast(`Player error: ${data.details}`, false);
+                          hls.destroy();
+                          break;
+                      }
+                    }
+                  });
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                  video.src = url;
+                  video.addEventListener('loadedmetadata', () => {
+                    if (hasSavedPos) {
+                      video.currentTime = savedTime;
+                      showToast(`Resumed Episode ${epNum} at ${formatTime(savedTime)}`, false);
+                    }
+                    if (autoPlay) art.play().catch(() => {});
+                  }, { once: true });
+                }
+              }
+            }
+          });
+
+          // Sync volume UI
+          updateVolumeUI();
+
+          // Save playback progress on timeupdate
+          let lastSavedSec = 0;
+          artInstance.on('video:timeupdate', () => {
+            const cur = Math.floor(artInstance.currentTime || 0);
+            if (cur > 0 && Math.abs(cur - lastSavedSec) >= 2) {
+              lastSavedSec = cur;
+              if (artInstance.duration && (artInstance.duration - artInstance.currentTime < 15 || artInstance.currentTime / artInstance.duration > 0.95)) {
+                localStorage.removeItem(progressKey);
+              } else {
+                localStorage.setItem(progressKey, artInstance.currentTime.toFixed(1));
+              }
+            }
+          });
+
+          // Sync volume state
+          artInstance.on('video:volumechange', () => {
+            if (Math.abs(artInstance.volume - currentVolume) > 0.01 || artInstance.muted !== isMuted) {
+              currentVolume = artInstance.volume;
+              isMuted = artInstance.muted;
+              localStorage.setItem('ani_ui_volume', currentVolume.toString());
+              localStorage.setItem('ani_ui_muted', isMuted ? 'true' : 'false');
+              updateVolumeUI();
+            }
+          });
+
+          // Auto Next
+          artInstance.on('video:ended', () => {
             localStorage.removeItem(progressKey);
             if (autoNext) {
               showToast('Auto Next: Playing next episode...', false);
               nextEpisode();
             }
-          };
+          });
+
+          // Update Captions UI
+          applyCaptionsState();
 
           if (!hasSavedPos) {
             showToast(`Now playing Episode ${epNum}!`, false);
@@ -3431,18 +3653,19 @@
     }
 
     function stopVideoPlayer() {
-      const video = document.getElementById('playerVideo');
-      if (video) {
-        video.pause();
-        video.ontimeupdate = null;
-        video.removeAttribute('src');
-        video.innerHTML = '';
-        video.load();
+      if (artInstance) {
+        try {
+          artInstance.destroy(true);
+        } catch (e) {}
+        artInstance = null;
       }
       if (hlsInstance) {
-        hlsInstance.destroy();
+        try {
+          hlsInstance.destroy();
+        } catch (e) {}
         hlsInstance = null;
       }
+      currentSubtitles = [];
       qualityLevels = [];
       const label = document.getElementById('qualityLabel');
       if (label) label.innerText = 'Quality';
