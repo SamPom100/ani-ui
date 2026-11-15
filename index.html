@@ -993,6 +993,62 @@
       color: var(--accent-color);
     }
 
+    .pc-cc-menu {
+      min-width: 210px;
+      max-width: 280px;
+      padding: 6px;
+    }
+
+    .pc-dropdown-header {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 4px 8px 6px;
+    }
+
+    .pc-dropdown-divider {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 6px 0;
+    }
+
+    .pc-cc-size-wrap {
+      padding: 6px 8px 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .pc-cc-size-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #ccc;
+    }
+
+    .pc-cc-size-val {
+      color: var(--accent-color);
+      font-weight: 700;
+      font-size: 11.5px;
+    }
+
+    .pc-cc-slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pc-cc-slider-row input[type="range"] {
+      flex: 1;
+      height: 4px;
+      accent-color: var(--accent-color);
+      cursor: pointer;
+    }
+
     .pc-btn-fav.active {
       background: rgba(245, 158, 11, 0.2);
       border-color: #f59e0b;
@@ -1922,9 +1978,13 @@
                 <div class="pc-dropdown-menu" id="qualityMenu" style="display: none;"></div>
               </div>
 
-              <button class="pc-btn pc-btn-cc active" id="btnToggleCC" onclick="toggleCaptions()" title="Toggle Captions">
-                <i class="fas fa-closed-captioning"></i> <span id="ccText">CC: ON</span>
-              </button>
+              <!-- Dedicated Captions Selector & Settings -->
+              <div class="pc-dropdown-wrap" id="ccDropdownWrap">
+                <button class="pc-btn pc-btn-cc active" id="btnToggleCC" onclick="toggleCCMenu(event)" title="Subtitles & Caption Size">
+                  <i class="fas fa-closed-captioning"></i> <span id="ccText">CC: ON</span>
+                </button>
+                <div class="pc-dropdown-menu pc-cc-menu" id="ccMenu" style="display: none;"></div>
+              </div>
               <button class="pc-btn" onclick="prevEpisode()">
                 <i class="fas fa-backward"></i> Prev
               </button>
@@ -2122,7 +2182,9 @@
     let hlsInstance = null;
     let autoPlay = true;
     let autoNext = true;
-    let captionsEnabled = true;
+    let captionsEnabled = localStorage.getItem('ani_ui_captions') !== 'false';
+    let captionSize = parseInt(localStorage.getItem('ani_ui_caption_size') || '100', 10);
+    let selectedSubtitleTrack = -1;
     let qualityLevels = [];
     let currentQualityLevel = -1; // -1 = Auto
     let savedQualityPref = localStorage.getItem('ani_ui_quality') || 'Auto';
@@ -2161,24 +2223,68 @@
       document.getElementById('switchAutoNext').classList.toggle('on', autoNext);
     }
 
+    /* CAPTIONS & SUBTITLE SIZE CONTROLS */
+    function applyCaptionSize(size) {
+      captionSize = Math.max(50, Math.min(250, parseInt(size, 10) || 100));
+      localStorage.setItem('ani_ui_caption_size', captionSize.toString());
+
+      const valLabel = document.getElementById('captionSizeVal');
+      if (valLabel) valLabel.innerText = `${captionSize}%`;
+
+      const slider = document.getElementById('captionSizeSlider');
+      if (slider && parseInt(slider.value, 10) !== captionSize) {
+        slider.value = captionSize;
+      }
+
+      let styleEl = document.getElementById('captionCustomStyle');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'captionCustomStyle';
+        document.head.appendChild(styleEl);
+      }
+      const basePx = Math.round(20 * (captionSize / 100));
+      styleEl.textContent = `
+        ::cue, video::cue {
+          font-size: max(${basePx}px, calc(1.85vw * ${captionSize / 100})) !important;
+          line-height: 1.35 !important;
+          background-color: rgba(0, 0, 0, 0.75) !important;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 5px rgba(0,0,0,0.9) !important;
+        }
+      `;
+    }
+
+    function handleCaptionSizeInput(val) {
+      applyCaptionSize(val);
+    }
+
     function applyCaptionsState() {
       const video = document.getElementById('playerVideo');
       const ccBtn = document.getElementById('btnToggleCC');
       const ccText = document.getElementById('ccText');
 
       if (ccBtn) ccBtn.classList.toggle('active', captionsEnabled);
-      if (ccText) ccText.innerText = captionsEnabled ? 'CC: ON' : 'CC: OFF';
+      if (ccText) {
+        if (!captionsEnabled) {
+          ccText.innerText = 'CC: OFF';
+        } else if (video && video.textTracks && selectedSubtitleTrack >= 0 && video.textTracks[selectedSubtitleTrack]) {
+          const l = video.textTracks[selectedSubtitleTrack].label || 'ON';
+          ccText.innerText = `CC: ${l.split(' ')[0]}`;
+        } else {
+          ccText.innerText = 'CC: ON';
+        }
+      }
+
+      applyCaptionSize(captionSize);
 
       if (!video || !video.textTracks) return;
 
-      let showedOne = false;
       for (let i = 0; i < video.textTracks.length; i++) {
         const track = video.textTracks[i];
         if (captionsEnabled) {
-          const isEn = track.language === 'en' || (track.label && track.label.toLowerCase().includes('en'));
-          if (!showedOne && (isEn || i === 0)) {
+          if (selectedSubtitleTrack === i) {
             track.mode = 'showing';
-            showedOne = true;
+          } else if (selectedSubtitleTrack === -1 && i === 0) {
+            track.mode = 'showing';
           } else {
             track.mode = 'hidden';
           }
@@ -2186,17 +2292,93 @@
           track.mode = 'hidden';
         }
       }
+      renderCCMenu();
     }
 
-    function toggleCaptions() {
-      captionsEnabled = !captionsEnabled;
+    function selectSubtitleTrack(idx, enable) {
+      captionsEnabled = enable;
+      selectedSubtitleTrack = idx;
+      localStorage.setItem('ani_ui_captions', enable ? 'true' : 'false');
       applyCaptionsState();
-      showToast(captionsEnabled ? 'Captions: ON' : 'Captions: OFF', false);
+      showToast(enable ? 'Subtitles updated' : 'Subtitles turned off', false);
+    }
+
+    function toggleCCMenu(e) {
+      if (e) e.stopPropagation();
+      const qMenu = document.getElementById('qualityMenu');
+      if (qMenu) qMenu.style.display = 'none';
+
+      const menu = document.getElementById('ccMenu');
+      if (!menu) return;
+      const isOpen = menu.style.display !== 'none';
+      if (!isOpen) {
+        renderCCMenu();
+        menu.style.display = 'flex';
+      } else {
+        menu.style.display = 'none';
+      }
+    }
+
+    function renderCCMenu() {
+      const menu = document.getElementById('ccMenu');
+      if (!menu) return;
+      const video = document.getElementById('playerVideo');
+      const tracks = video ? Array.from(video.textTracks || []) : [];
+
+      let tracksHtml = '';
+      if (tracks.length === 0) {
+        tracksHtml = `
+          <div class="pc-dropdown-header">Subtitles</div>
+          <div class="pc-dropdown-item ${!captionsEnabled ? 'active' : ''}" onclick="selectSubtitleTrack(-1, false)">
+            <span>Off</span>
+            ${!captionsEnabled ? '<i class="fas fa-check"></i>' : ''}
+          </div>
+          <div style="padding: 6px 10px; font-size: 11.5px; color: #888; font-style: italic;">No tracks available</div>
+        `;
+      } else {
+        const isOff = !captionsEnabled;
+        tracksHtml = `
+          <div class="pc-dropdown-header">Subtitles</div>
+          <div class="pc-dropdown-item ${isOff ? 'active' : ''}" onclick="selectSubtitleTrack(-1, false)">
+            <span>Off</span>
+            ${isOff ? '<i class="fas fa-check"></i>' : ''}
+          </div>
+        `;
+        tracks.forEach((track, idx) => {
+          const isActive = captionsEnabled && (selectedSubtitleTrack === idx || (selectedSubtitleTrack === -1 && (track.default || idx === 0)));
+          const label = track.label || track.language || `Track ${idx + 1}`;
+          tracksHtml += `
+            <div class="pc-dropdown-item ${isActive ? 'active' : ''}" onclick="selectSubtitleTrack(${idx}, true)">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 175px;">${escapeHtml(label)}</span>
+              ${isActive ? '<i class="fas fa-check"></i>' : ''}
+            </div>
+          `;
+        });
+      }
+
+      menu.innerHTML = `
+        ${tracksHtml}
+        <div class="pc-dropdown-divider"></div>
+        <div class="pc-cc-size-wrap" onclick="event.stopPropagation()">
+          <div class="pc-cc-size-header">
+            <span>Caption Size</span>
+            <span class="pc-cc-size-val" id="captionSizeVal">${captionSize}%</span>
+          </div>
+          <div class="pc-cc-slider-row">
+            <span style="font-size: 11px; color: #888; font-weight: 600;">A</span>
+            <input type="range" class="pc-vol-slider" id="captionSizeSlider" min="60" max="220" step="5" value="${captionSize}" oninput="handleCaptionSizeInput(this.value)" title="Adjust Caption Size">
+            <span style="font-size: 16px; color: #ccc; font-weight: 700;">A</span>
+          </div>
+        </div>
+      `;
     }
 
     /* QUALITY SELECTOR */
     function toggleQualityMenu(e) {
       if (e) e.stopPropagation();
+      const ccMenu = document.getElementById('ccMenu');
+      if (ccMenu) ccMenu.style.display = 'none';
+
       const menu = document.getElementById('qualityMenu');
       if (!menu) return;
       const isOpen = menu.style.display !== 'none';
@@ -2283,14 +2465,22 @@
       renderQualityMenu();
       const menu = document.getElementById('qualityMenu');
       if (menu) menu.style.display = 'none';
+      const ccMenu = document.getElementById('ccMenu');
+      if (ccMenu) ccMenu.style.display = 'none';
       showToast(`Video quality set to ${name}`, false);
     }
 
     document.addEventListener('click', (e) => {
-      const wrap = document.getElementById('qualityDropdownWrap');
-      const menu = document.getElementById('qualityMenu');
-      if (menu && wrap && !wrap.contains(e.target)) {
-        menu.style.display = 'none';
+      const qWrap = document.getElementById('qualityDropdownWrap');
+      const qMenu = document.getElementById('qualityMenu');
+      if (qMenu && qWrap && !qWrap.contains(e.target)) {
+        qMenu.style.display = 'none';
+      }
+
+      const ccWrap = document.getElementById('ccDropdownWrap');
+      const ccMenu = document.getElementById('ccMenu');
+      if (ccMenu && ccWrap && !ccWrap.contains(e.target)) {
+        ccMenu.style.display = 'none';
       }
     });
 
@@ -3103,19 +3293,25 @@
 
           // Subtitles
           if (res.subtitles && res.subtitles.length > 0) {
+            let defIdx = -1;
             res.subtitles.forEach((s, idx) => {
               const track = document.createElement('track');
               track.kind = 'subtitles';
               track.label = s.lang || s.label || `Subtitle ${idx+1}`;
               track.srclang = s.lang ? s.lang.toLowerCase() : 'en';
               track.src = s.src;
-              if (s.default || idx === 0) track.default = true;
+              if (s.default) defIdx = idx;
               video.appendChild(track);
             });
-            // Ensure captions mode is applied
+            if (selectedSubtitleTrack === -1 || selectedSubtitleTrack >= res.subtitles.length) {
+              selectedSubtitleTrack = defIdx !== -1 ? defIdx : 0;
+            }
             video.addEventListener('loadedmetadata', applyCaptionsState, { once: true });
             setTimeout(applyCaptionsState, 250);
             setTimeout(applyCaptionsState, 750);
+          } else {
+            selectedSubtitleTrack = -1;
+            setTimeout(applyCaptionsState, 100);
           }
 
           if (Hls.isSupported()) {
@@ -3198,6 +3394,8 @@
       if (label) label.innerText = 'Quality';
       const menu = document.getElementById('qualityMenu');
       if (menu) menu.style.display = 'none';
+      const ccMenu = document.getElementById('ccMenu');
+      if (ccMenu) ccMenu.style.display = 'none';
     }
 
     /* EXTERNAL DATABASE LINKS */
@@ -3483,6 +3681,9 @@
 
     // Initialize Volume UI
     updateVolumeUI();
+
+    // Initialize Caption Size Styling
+    applyCaptionSize(captionSize);
 
     // Check if URL specifies a show (/watch/:id or ?watch=:id or ?id=:id)
     const urlParams = new URLSearchParams(window.location.search);
