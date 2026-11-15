@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-ani-ui: Sleek HiAnime-style web UI for ani-cli with in-browser streaming.
-Zero external dependencies (uses Python standard library).
+ani-ui: Local web player and catalog browser for ani-cli.
+Uses only the Python standard library.
 """
 
 import os
