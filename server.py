@@ -1485,6 +1485,8 @@ def proxy_m3u8_content(url, ref):
     return "\n".join(rewritten)
 
 class RequestHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
@@ -1507,12 +1509,14 @@ class RequestHandler(BaseHTTPRequestHandler):
         VALID_TABS = {"latest", "schedule", "favorites", "mal_watching", "mal_ptw", "history"}
         clean_p = path.strip("/")
         if path == "/" or path.startswith("/watch") or clean_p in VALID_TABS:
+            html_path = Path(__file__).parent / "index.html"
+            content = html_path.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
             self.end_headers()
-            html_path = Path(__file__).parent / "index.html"
-            with open(html_path, "rb") as f:
-                self.wfile.write(f.read())
+            if self.command != "HEAD":
+                self.wfile.write(content)
             return
 
         if path == "/api/thumb":
@@ -1890,10 +1894,13 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _send_json(self, data, code=200):
+        body = json.dumps(data).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode("utf-8"))
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
 def main():
     print(f"Starting ani-ui server on http://localhost:{PORT}")
