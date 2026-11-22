@@ -204,9 +204,22 @@
       align-items: center;
       gap: 6px;
       overflow-x: auto;
-      scrollbar-width: none;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 186, 222, 0.3) transparent;
+      padding-bottom: 4px;
+      -webkit-overflow-scrolling: touch;
     }
-    .header-tabs::-webkit-scrollbar { display: none; }
+    .header-tabs::-webkit-scrollbar {
+      height: 4px;
+    }
+    .header-tabs::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+    }
+    .header-tabs::-webkit-scrollbar-thumb {
+      background: rgba(255, 186, 222, 0.35);
+      border-radius: 4px;
+    }
 
     .tab-btn {
       background: transparent;
@@ -1085,9 +1098,22 @@
     }
 
     .pc-cc-menu {
-      min-width: 210px;
-      max-width: 280px;
-      padding: 6px;
+      min-width: 260px;
+      max-width: 340px;
+      max-height: 75vh;
+      display: flex;
+      flex-direction: column;
+      padding: 8px;
+    }
+
+    .pc-cc-tracklist {
+      max-height: 240px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
     }
 
     .pc-dropdown-header {
@@ -1733,7 +1759,21 @@
       display: flex;
       gap: 8px;
       overflow-x: auto;
-      padding-bottom: 6px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 186, 222, 0.3) transparent;
+      padding-bottom: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .date-nav-bar::-webkit-scrollbar {
+      height: 4px;
+    }
+    .date-nav-bar::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+    }
+    .date-nav-bar::-webkit-scrollbar-thumb {
+      background: rgba(255, 186, 222, 0.35);
+      border-radius: 4px;
     }
 
     .date-pill {
@@ -1921,6 +1961,70 @@
       padding: 80px 20px;
       color: var(--text-muted);
       font-size: 14px;
+    }
+
+    /* MOBILE & RESPONSIVE LAYOUT */
+    @media (max-width: 768px) {
+      header {
+        padding: 10px 14px;
+        gap: 8px;
+      }
+
+      .header-top {
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .brand {
+        flex: 1;
+      }
+
+      .header-actions {
+        order: 1;
+        gap: 6px;
+      }
+
+      .btn-header-action {
+        padding: 6px 10px;
+        font-size: 11.5px;
+      }
+
+      .search-bar {
+        order: 2;
+        max-width: 100%;
+        width: 100%;
+      }
+
+      .search-bar input {
+        padding: 8px 16px 8px 36px;
+        font-size: 13px;
+      }
+
+      .header-tabs {
+        padding-bottom: 6px;
+        gap: 4px;
+      }
+
+      .tab-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+
+      .pc-cc-menu {
+        min-width: 280px;
+        max-width: calc(100vw - 28px);
+        right: -8px;
+      }
+
+      .player-controls {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pc-btn {
+        padding: 7px 10px;
+        font-size: 11.5px;
+      }
     }
   </style>
 </head>
@@ -2643,7 +2747,6 @@
       let tracksHtml = '';
       if (!currentSubtitles || currentSubtitles.length === 0) {
         tracksHtml = `
-          <div class="pc-dropdown-header">Subtitles</div>
           <div class="pc-dropdown-item ${!captionsEnabled ? 'active' : ''}" onclick="selectSubtitleTrack(-1, false)">
             <span>Off</span>
             ${!captionsEnabled ? '<i class="fas fa-check"></i>' : ''}
@@ -2653,7 +2756,6 @@
       } else {
         const isOff = !captionsEnabled;
         tracksHtml = `
-          <div class="pc-dropdown-header">Subtitles</div>
           <div class="pc-dropdown-item ${isOff ? 'active' : ''}" onclick="selectSubtitleTrack(-1, false)">
             <span>Off</span>
             ${isOff ? '<i class="fas fa-check"></i>' : ''}
@@ -2664,7 +2766,7 @@
           const label = track.label || track.lang || `Track ${idx + 1}`;
           tracksHtml += `
             <div class="pc-dropdown-item ${isActive ? 'active' : ''}" onclick="selectSubtitleTrack(${idx}, true)">
-              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 175px;">${escapeHtml(label)}</span>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;">${escapeHtml(label)}</span>
               ${isActive ? '<i class="fas fa-check"></i>' : ''}
             </div>
           `;
@@ -2672,7 +2774,10 @@
       }
 
       menu.innerHTML = `
-        ${tracksHtml}
+        <div class="pc-dropdown-header">Subtitles</div>
+        <div class="pc-cc-tracklist">
+          ${tracksHtml}
+        </div>
         <div class="pc-dropdown-divider"></div>
         <div class="pc-cc-size-wrap" onclick="event.stopPropagation()">
           <div class="pc-cc-size-header">
