@@ -763,17 +763,29 @@ def get_anime_details_and_episodes(anime_id):
     card = tag_card_status(card, favs, watching, completed, all_by_id)
     return card
 
+def get_mal_auth_header():
+    try:
+        token = get_mal_access_token()
+        if token:
+            return {"Authorization": f"Bearer {token}"}
+    except Exception as e:
+        print(f"[MAL Auth] Access token unavailable: {e}")
+
+    secrets = get_secrets()
+    client_id = secrets.get("MAL_CLIENT_ID", "ea58d724802b654ee16451f5c377b6cf")
+    return {"X-MAL-CLIENT-ID": client_id}
+
 def fetch_mal_list(status):
     cache_key = f"mal_{status}"
     if cache_key in CACHE and (time.time() - CACHE[cache_key]["ts"]) < 180:
         return CACHE[cache_key]["data"]
 
-    token = get_mal_access_token()
+    auth_header = get_mal_auth_header()
     secrets = get_secrets()
     username = secrets.get("MAL_USERNAME", "exodiaen")
     
     url = f"https://api.myanimelist.net/v2/users/{username}/animelist?status={status}&limit=100&fields=list_status,num_episodes,genres,mean,main_picture,synopsis"
-    raw = http_get(url, {"Authorization": f"Bearer {token}"})
+    raw = http_get(url, auth_header)
     data = json.loads(raw)
 
     favs, watching, completed, all_by_clean, all_by_id = get_user_status_sets()
@@ -820,7 +832,7 @@ def fetch_mal_list(status):
     return items
 
 def get_mal_anime_status(title=None, mal_id=None, anime_id=None):
-    token = get_mal_access_token()
+    auth_header = get_mal_auth_header()
     
     # 1. Resolve mal_id if missing but anime_id provided
     if not mal_id and anime_id:
@@ -837,7 +849,7 @@ def get_mal_anime_status(title=None, mal_id=None, anime_id=None):
     if mal_id:
         try:
             url = f"https://api.myanimelist.net/v2/anime/{mal_id}?fields=id,title,my_list_status,num_episodes,synopsis,mean"
-            raw = http_get(url, {"Authorization": f"Bearer {token}"})
+            raw = http_get(url, auth_header)
             data = json.loads(raw)
             if "id" in data:
                 res_obj = {
@@ -973,9 +985,9 @@ def get_combined_recommendations(mal_id=None, anime_id=None, title=None, limit=3
         if not mal_id:
             return
         try:
-            token = get_mal_access_token()
+            auth_header = get_mal_auth_header()
             url = f"https://api.myanimelist.net/v2/anime/{mal_id}?fields=recommendations{{num_recommendations}}"
-            raw = http_get(url, {"Authorization": f"Bearer {token}"})
+            raw = http_get(url, auth_header)
             data = json.loads(raw)
             for r in data.get("recommendations", []):
                 node = r.get("node", {})
@@ -1596,11 +1608,14 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             try:
                 rewritten_m3u8 = proxy_m3u8_content(target_url, ref)
+                body = rewritten_m3u8.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/vnd.apple.mpegurl")
+                self.send_header("Content-Length", str(len(body)))
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
-                self.wfile.write(rewritten_m3u8.encode("utf-8"))
+                if self.command != "HEAD":
+                    self.wfile.write(body)
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, 500)
             return
