@@ -2146,8 +2146,72 @@
         gap: 12px;
       }
 
+      main {
+        padding: 14px 12px 60px;
+      }
+
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 12px !important;
+      }
+
+      .card-info {
+        padding: 8px 10px;
+      }
+
+      .card-title {
+        font-size: 12.5px;
+      }
+
+      .watch-breadcrumb-bar {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .breadcrumb-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        overflow-x: auto;
+        white-space: nowrap;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+      }
+      .breadcrumb-left::-webkit-scrollbar {
+        display: none;
+      }
+
+      .breadcrumb-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        overflow-x: auto;
+        white-space: nowrap;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 2px;
+      }
+      .breadcrumb-right::-webkit-scrollbar {
+        display: none;
+      }
+
+      .watch-episodes-col {
+        max-height: 400px;
+      }
+
       .pc-vol-slider {
-        height: 28px;
+        display: none !important;
+      }
+
+      .pc-volume-control {
+        gap: 0 !important;
+      }
+
+      .pc-btn-vol #volText {
+        display: none !important;
       }
 
       .player-controls {
@@ -3849,6 +3913,13 @@
           </div>
         `;
       }).join('');
+
+      setTimeout(() => {
+        const activeItem = container.querySelector('.ssl-item.active');
+        if (activeItem) {
+          activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      }, 50);
     }
 
     function filterEpisodes() {
@@ -3865,7 +3936,11 @@
       selectedEpisode = epNum;
       document.getElementById('psCurrentEpNotice').innerText = `Episode ${epNum}`;
       document.querySelectorAll('.ssl-item').forEach(b => {
-        b.classList.toggle('active', b.getAttribute('data-ep') === epNum);
+        const isTarget = b.getAttribute('data-ep') === epNum;
+        b.classList.toggle('active', isTarget);
+        if (isTarget) {
+          b.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
       });
       if (currentAnime && currentAnime.id) {
         window.history.replaceState({ animeId: currentAnime.id, ep: epNum }, '', `/watch/${currentAnime.id}?ep=${epNum}`);
@@ -4091,6 +4166,7 @@
             fullscreen: true,
             fullscreenWeb: true,
             mutex: true,
+            fastForward: true,
             theme: '#FFBADE',
             volume: currentVolume,
             isLive: false,
@@ -4191,6 +4267,34 @@
 
           window.artInstance = artInstance;
           attachMultiCueSubtitleRenderer(artInstance);
+
+          // Mobile double-tap seek (left 35% rewinds 10s, right 35% forwards 10s)
+          let lastTapTime = 0;
+          let lastTapX = 0;
+          if (artInstance.template && artInstance.template.$player) {
+            artInstance.template.$player.addEventListener('touchend', (e) => {
+              const now = Date.now();
+              const touch = e.changedTouches ? e.changedTouches[0] : null;
+              if (!touch) return;
+              const rect = artInstance.template.$player.getBoundingClientRect();
+              const x = touch.clientX - rect.left;
+              const isLeft = x < rect.width * 0.35;
+              const isRight = x > rect.width * 0.65;
+              if (now - lastTapTime < 320 && Math.abs(x - lastTapX) < 80) {
+                if (isLeft) {
+                  artInstance.seek = Math.max(0, artInstance.currentTime - 10);
+                  if (artInstance.notice) artInstance.notice.show = '-10s';
+                } else if (isRight) {
+                  artInstance.seek = Math.min(artInstance.duration, artInstance.currentTime + 10);
+                  if (artInstance.notice) artInstance.notice.show = '+10s';
+                }
+                lastTapTime = 0;
+                return;
+              }
+              lastTapTime = now;
+              lastTapX = x;
+            });
+          }
 
           // Sync volume UI
           updateVolumeUI();
