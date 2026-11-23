@@ -784,7 +784,7 @@ def fetch_mal_list(status):
     secrets = get_secrets()
     username = secrets.get("MAL_USERNAME", "exodiaen")
     
-    url = f"https://api.myanimelist.net/v2/users/{username}/animelist?status={status}&limit=100&fields=list_status,num_episodes,genres,mean,main_picture,synopsis"
+    url = f"https://api.myanimelist.net/v2/users/{username}/animelist?status={status}&limit=100&fields=list_status,num_episodes,genres,mean,num_list_users,main_picture,synopsis"
     raw = http_get(url, auth_header)
     data = json.loads(raw)
 
@@ -801,6 +801,8 @@ def fetch_mal_list(status):
         watched = list_status.get("num_episodes_watched", 0)
         score = list_status.get("score") or node.get("mean") or "-"
         user_score = list_status.get("score", 0)
+        mean_score = node.get("mean") or 0.0
+        members = node.get("num_list_users", 0)
         current_status = list_status.get("status", status)
         genres_list = [g.get("name", "") for g in node.get("genres", []) if g.get("name")]
         genres = ", ".join(genres_list) if genres_list else "Unknown"
@@ -817,6 +819,8 @@ def fetch_mal_list(status):
             "eps": f"{watched}/{num_eps}",
             "score": str(score),
             "user_score": user_score,
+            "mean_score": mean_score,
+            "members": members,
             "status": current_status,
             "genres": genres,
             "synopsis": synopsis,

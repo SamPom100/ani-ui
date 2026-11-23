@@ -262,6 +262,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
       margin-bottom: 20px;
     }
 
@@ -2294,7 +2296,21 @@
           <i class="fas fa-bolt"></i>
           <span>Recently Updated</span>
         </div>
-        <div class="section-count" id="sectionCount">Loading catalog...</div>
+        <div class="section-actions" style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+          <div id="sectionSortWrap" style="display: none; align-items: center; gap: 6px;">
+            <label for="sectionSortSelect" style="font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 5px;">
+              <i class="fas fa-sort"></i> Sort:
+            </label>
+            <select id="sectionSortSelect" onchange="handleSortChange()" style="background: #181824; color: #fff; border: 1px solid #2b2a3c; border-radius: 8px; padding: 5px 10px; font-size: 13px; outline: none; cursor: pointer;">
+              <option value="default">Default</option>
+              <option value="members_desc">Members (High to Low)</option>
+              <option value="members_asc">Members (Low to High)</option>
+              <option value="score_desc">Score (High to Low)</option>
+              <option value="score_asc">Score (Low to High)</option>
+            </select>
+          </div>
+          <div class="section-count" id="sectionCount">Loading catalog...</div>
+        </div>
       </div>
 
       <div id="contentView">
@@ -3307,10 +3323,53 @@
       return `/api/thumb?url=${encodeURIComponent(url)}`;
     }
 
+    function formatCompactNumber(num) {
+      if (!num || isNaN(num)) return '0';
+      if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+      if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+      return num.toString();
+    }
+
+    let currentMALItems = [];
+
+    function applyMALSortAndRender() {
+      const sortSelect = document.getElementById('sectionSortSelect');
+      const sortMode = sortSelect ? sortSelect.value : 'default';
+      let items = [...currentMALItems];
+
+      const getScoreVal = (item) => {
+        const val = parseFloat(item.mean_score) || parseFloat(item.score);
+        return isNaN(val) ? 0 : val;
+      };
+
+      if (sortMode === 'members_desc') {
+        items.sort((a, b) => (b.members || 0) - (a.members || 0));
+      } else if (sortMode === 'members_asc') {
+        items.sort((a, b) => (a.members || 0) - (b.members || 0));
+      } else if (sortMode === 'score_desc') {
+        items.sort((a, b) => getScoreVal(b) - getScoreVal(a));
+      } else if (sortMode === 'score_asc') {
+        items.sort((a, b) => getScoreVal(a) - getScoreVal(b));
+      }
+
+      renderGrid(items);
+    }
+
+    function handleSortChange() {
+      applyMALSortAndRender();
+    }
+
     /* TABS */
     async function loadTab(tabName, shouldPushState = true) {
       currentTab = tabName;
       closeWatchView();
+
+      const sortWrap = document.getElementById('sectionSortWrap');
+      if (tabName === 'mal_watching' || tabName === 'mal_ptw') {
+        if (sortWrap) sortWrap.style.display = 'flex';
+      } else {
+        if (sortWrap) sortWrap.style.display = 'none';
+      }
 
       if (shouldPushState) {
         const targetUrl = tabName === 'latest' ? '/?tab=latest' : `/?tab=${tabName}`;
@@ -3381,8 +3440,9 @@
         view.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Fetching MAL Watching...</div>';
         const data = await fetchJson('/api/mal?status=watching');
         if (data.status === 'ok') {
-          renderGrid(data.results);
-          setCount(`${data.results.length} anime watching`);
+          currentMALItems = data.results || [];
+          applyMALSortAndRender();
+          setCount(`${currentMALItems.length} anime watching`);
         } else {
           view.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle" style="font-size:24px;color:#ef4444;margin-bottom:8px;"></i><br>Failed to load MAL Watching: ${data.message || 'Server error'}</div>`;
           setCount('Failed to load');
@@ -3393,8 +3453,9 @@
         view.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Fetching MAL Plan to Watch...</div>';
         const data = await fetchJson('/api/mal?status=plan_to_watch');
         if (data.status === 'ok') {
-          renderGrid(data.results);
-          setCount(`${data.results.length} anime planned`);
+          currentMALItems = data.results || [];
+          applyMALSortAndRender();
+          setCount(`${currentMALItems.length} anime planned`);
         } else {
           view.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle" style="font-size:24px;color:#ef4444;margin-bottom:8px;"></i><br>Failed to load Plan to Watch: ${data.message || 'Server error'}</div>`;
           setCount('Failed to load');
@@ -3426,6 +3487,8 @@
       if (!q) return;
 
       closeWatchView();
+      const sortWrap = document.getElementById('sectionSortWrap');
+      if (sortWrap) sortWrap.style.display = 'none';
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       const titleEl = document.getElementById('sectionTitle');
       titleEl.innerHTML = `<i class="fas fa-search"></i><span>Search: "${q}"</span>`;
@@ -3531,6 +3594,7 @@
                   ` : ''}
                   <div class="card-meta">
                     <span>${anime.type || 'Anime'}</span>
+                    ${anime.members ? `<span title="${anime.members.toLocaleString()} members" style="color:#94a3b8;"><i class="fas fa-users"></i> ${formatCompactNumber(anime.members)}</span>` : ''}
                     ${anime.score && anime.score !== '-' ? `<span style="color:#fbbf24; font-weight:700;"><i class="fas fa-star"></i> ${anime.score}</span>` : ''}
                   </div>
                 </div>
