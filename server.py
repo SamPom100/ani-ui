@@ -73,26 +73,53 @@ def save_mal_descriptions_cache():
     except Exception:
         pass
 
-MAL_MAP_FILE = "/Users/sampomerantz/MAL-Map/data-collection/data/min_metadata.json"
+MAL_MAP_FILE = os.path.join(STATE_DIR, "mal_map_min_metadata.json")
 MAL_MAP_METADATA = {}
-if os.path.exists(MAL_MAP_FILE):
-    try:
-        with open(MAL_MAP_FILE, "r") as f:
-            MAL_MAP_METADATA = json.load(f)
-    except Exception:
-        MAL_MAP_METADATA = {}
+
+def load_mal_map_metadata():
+    global MAL_MAP_METADATA
+    search_paths = [
+        MAL_MAP_FILE,
+        os.path.expanduser("~/MAL-Map/data-collection/data/min_metadata.json"),
+        os.path.join(os.path.dirname(__file__), "min_metadata.json")
+    ]
+    for p in search_paths:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    MAL_MAP_METADATA = json.load(f)
+                    return
+            except Exception:
+                pass
+
+    def _download():
+        global MAL_MAP_METADATA
+        url = "https://raw.githubusercontent.com/SamPom100/malmap/master/data-collection/data/min_metadata.json"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                MAL_MAP_METADATA = data
+                os.makedirs(os.path.dirname(MAL_MAP_FILE), exist_ok=True)
+                with open(MAL_MAP_FILE, "w", encoding="utf-8") as f:
+                    json.dump(data, f)
+        except Exception:
+            pass
+    threading.Thread(target=_download, daemon=True).start()
+
+load_mal_map_metadata()
 
 def get_mal_map_url(mal_id=None, title=None, alt_title=None):
     if mal_id and str(mal_id) in MAL_MAP_METADATA:
         t = MAL_MAP_METADATA[str(mal_id)].get("title", "")
         if t:
             c = re.sub(r'[^a-z0-9]', '_', t.lower())
-            return f"https://sampom100.github.io/MAL-Map/#show={c}"
+            return f"https://sampom100.github.io/malmap/#show={c}"
     for cand in [alt_title, title]:
         if cand:
             c = re.sub(r'[^a-z0-9]', '_', cand.lower())
-            return f"https://sampom100.github.io/MAL-Map/#show={c}"
-    return "https://sampom100.github.io/MAL-Map/"
+            return f"https://sampom100.github.io/malmap/#show={c}"
+    return "https://sampom100.github.io/malmap/"
 
 def get_secrets():
     secrets = {}

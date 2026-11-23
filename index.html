@@ -2345,7 +2345,7 @@
             <span>AniList</span>
             <i class="fas fa-external-link-alt"></i>
           </a>
-          <a id="btnLinkMALMap" class="btn-ext-link btn-malmap" href="https://sampom100.github.io/MAL-Map/" target="_blank" rel="noopener noreferrer" title="Explore on MAL-Map">
+          <a id="btnLinkMALMap" class="btn-ext-link btn-malmap" href="https://sampom100.github.io/malmap/" target="_blank" rel="noopener noreferrer" title="Explore on MAL-Map">
             <span class="btn-badge-brand malmap-badge">MAP</span>
             <span>MAL-Map</span>
             <i class="fas fa-network-wired"></i>
@@ -4480,9 +4480,9 @@
           mapLink.href = currentAnime.mal_map_url;
         } else if (t) {
           const canon = t.toLowerCase().replace(/[^a-z0-9]/g, '_');
-          mapLink.href = `https://sampom100.github.io/MAL-Map/#show=${encodeURIComponent(canon)}`;
+          mapLink.href = `https://sampom100.github.io/malmap/#show=${encodeURIComponent(canon)}`;
         } else {
-          mapLink.href = 'https://sampom100.github.io/MAL-Map/';
+          mapLink.href = 'https://sampom100.github.io/malmap/';
         }
       }
     }
@@ -4638,7 +4638,7 @@
           sourceBadgeHtml = '<span class="rec-source-badge rec-source-mal">MAL</span>';
         }
 
-        const malMapLink = anime.mal_map_url || (anime.title ? `https://sampom100.github.io/MAL-Map/#show=${encodeURIComponent(anime.title.toLowerCase().replace(/[^a-z0-9]/g, '_'))}` : 'https://sampom100.github.io/MAL-Map/');
+        const malMapLink = anime.mal_map_url || (anime.title ? `https://sampom100.github.io/malmap/#show=${encodeURIComponent(anime.title.toLowerCase().replace(/[^a-z0-9]/g, '_'))}` : 'https://sampom100.github.io/malmap/');
 
         return `
           <div class="${cardClasses}" onclick='handleCardClick(${JSON.stringify(anime).replace(/'/g, "&apos;")})'>

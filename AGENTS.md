@@ -48,8 +48,8 @@ Ani UI shares state with `ani-cli` and local developer tools. Never alter these 
     * `MAL_REFRESH_TOKEN`: OAuth refresh token.
     * `MAL_USERNAME`: MAL account handle.
   * Invariant: When refreshing expired MAL tokens, `server.py` writes the refreshed `MAL_REFRESH_TOKEN` back into `~/.secrets.env` in place, preserving existing keys and comments.
-* **Franchise Knowledge Graph Metadata:** `/Users/sampomerantz/MAL-Map/data-collection/data/min_metadata.json`
-  * Static JSON export from the local MAL-Map project.
+* **Franchise Knowledge Graph Metadata:** `~/.local/state/ani-cli/mal_map_min_metadata.json`
+  * Static JSON export from the MAL-Map project (`SamPom100/malmap`).
   * Keyed by MAL ID string. Provides canonical Romaji titles and franchise nodes.
 
 ---
@@ -144,12 +144,12 @@ HiAnime anime IDs (e.g., `gushing-over-magical-girls-1-9557`) do not match MyAni
 * **Auto-Sorting:** The Favorites view automatically sorts titles by soonest airing episode first, followed by shows without scheduled air dates, and finished series last. When a releasing anime has no published upcoming episode date (`airing_at` is null), `time_until` must fall back to an integer sentinel (e.g. `888888888`), never `None`, to avoid Python `TypeError: '<' not supported between instances of 'NoneType' and 'int'`.
 
 ### Invariant 6: MAL-Map Canonical Hash Links
-* Links to the external franchise visualizer at `https://sampom100.github.io/MAL-Map/` must use hash navigation: `#show=<canonical_title>`.
+* Links to the external franchise visualizer at `https://sampom100.github.io/malmap/` must use hash navigation: `#show=<canonical_title>`.
 * **Formatting Rule:** Lowercase the title and replace all non-alphanumeric characters with single underscores:
   ```javascript
   title.toLowerCase().replace(/[^a-z0-9]/g, '_')
   ```
-* **Metadata Normalization:** MAL-Map is indexed primarily on Romaji titles. `server.py` queries `/Users/sampomerantz/MAL-Map/data-collection/data/min_metadata.json` using `mal_id` to retrieve the exact indexed title before computing the hash.
+* **Metadata Normalization:** MAL-Map is indexed primarily on Romaji titles. `server.py` queries `mal_map_min_metadata.json` using `mal_id` to retrieve the exact indexed title before computing the hash.
 
 ### Invariant 7: User Status Badges Across Catalog Views
 Every anime card rendered across Search, Latest, Schedule, Favorites, and Recommendations must reflect user library membership:
