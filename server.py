@@ -1327,17 +1327,21 @@ def resolve_schedule_poster_and_id(item):
 def get_schedule(selected_time=None):
     today = datetime.date.today()
     days = []
-    for i in range(7):
+    today_ts = None
+    for i in range(-3, 7):
         d = today + datetime.timedelta(days=i)
         ts = int(datetime.datetime(d.year, d.month, d.day, 0, 0, 0).timestamp())
+        if i == 0:
+            today_ts = str(ts)
         days.append({
             "time": str(ts),
             "date": d.strftime("%b %d"),
             "wday": d.strftime("%a"),
-            "is_today": i == 0
+            "is_today": i == 0,
+            "is_past": i < 0
         })
 
-    target_time = selected_time if selected_time else days[0]["time"]
+    target_time = selected_time if selected_time else today_ts
     cache_key = f"sched_{target_time}"
     if cache_key in CACHE and (time.time() - CACHE[cache_key]["ts"]) < 300:
         return {"days": days, "items": CACHE[cache_key]["items"], "selected_time": str(target_time)}

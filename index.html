@@ -3572,20 +3572,32 @@
         const sched = data.data;
         const nav = document.getElementById('dateNavBar');
         nav.innerHTML = sched.days.map(d => `
-          <div class="date-pill ${d.time === sched.selected_time ? 'active' : ''}" onclick="selectScheduleDate('${d.time}')">
+          <div class="date-pill ${d.time === sched.selected_time ? 'active' : ''}" data-time="${d.time}" onclick="selectScheduleDate('${d.time}', this)">
             <span class="pill-wday">${d.wday}${d.is_today ? ' (Today)' : ''}</span>
             <span class="pill-date">${d.date}</span>
           </div>
         `).join('');
+
+        setTimeout(() => {
+          const activePill = nav.querySelector('.date-pill.active');
+          if (activePill) {
+            activePill.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+          }
+        }, 50);
 
         renderTimetable(sched.items);
         setCount(`${sched.items.length} shows scheduled today`);
       }
     }
 
-    async function selectScheduleDate(timeValue) {
+    async function selectScheduleDate(timeValue, el) {
       document.querySelectorAll('.date-pill').forEach(p => p.classList.remove('active'));
-      event.currentTarget.classList.add('active');
+      if (el) {
+        el.classList.add('active');
+      } else {
+        const p = document.querySelector(`.date-pill[data-time="${timeValue}"]`);
+        if (p) p.classList.add('active');
+      }
 
       const timetable = document.getElementById('scheduleTimetable');
       timetable.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>Loading day timetable...</div>';
