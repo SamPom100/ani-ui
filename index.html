@@ -955,20 +955,26 @@
     /* HiAnime Player Controls Bar */
     .player-controls {
       background: #11101a;
-      padding: 10px 16px;
+      padding: 8px 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       border-top: 1px solid #222131;
       border-bottom: 1px solid #222131;
-      gap: 12px;
-      flex-wrap: wrap;
+      gap: 10px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .player-controls::-webkit-scrollbar {
+      display: none;
     }
 
     .pc-left {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
+      flex-shrink: 0;
     }
 
     .pc-toggle-btn {
@@ -980,6 +986,7 @@
       color: #ccc;
       cursor: pointer;
       user-select: none;
+      white-space: nowrap;
     }
     .pc-toggle-switch {
       width: 32px;
@@ -1011,23 +1018,25 @@
     .pc-right {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      flex-shrink: 0;
     }
 
     .pc-btn {
       background: #201f31;
       border: 1px solid var(--border-subtle);
       color: #fff;
-      padding: 6px 12px;
+      padding: 6px 10px;
       border-radius: 6px;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 600;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       font-family: inherit;
       transition: all 0.15s ease;
+      white-space: nowrap;
     }
     .pc-btn:hover {
       background: #2c2b42;
@@ -1073,7 +1082,7 @@
     .pc-dropdown-menu {
       position: absolute;
       bottom: calc(100% + 8px);
-      right: 0;
+      left: 0;
       background: #1c1b2b;
       border: 1px solid var(--border-subtle);
       border-radius: 8px;
@@ -3099,7 +3108,9 @@
 
       if (label) {
         if (currentQualityLevel === -1) {
-          label.innerText = autoSuffix ? `Auto${autoSuffix}` : 'Auto';
+          label.innerText = (autoSuffix && qualityLevels[hlsInstance.currentLevel])
+            ? `${qualityLevels[hlsInstance.currentLevel].height}p`
+            : 'Auto';
         } else if (qualityLevels[currentQualityLevel]) {
           const h = qualityLevels[currentQualityLevel].height;
           label.innerText = h ? `${h}p` : 'Auto';
